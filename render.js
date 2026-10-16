@@ -111,8 +111,8 @@ async function main() {
   const cardsPath = path.resolve(process.argv[2] || path.join(__dirname, 'cards.json'));
   const outDir = path.resolve(process.argv[3] || path.join(__dirname, 'out'));
   // Patched Noto Sans Duployan (scripts/patch_font.py), no longer used:
-  // const font = fs.readFileSync(path.join(__dirname, 'fonts', 'NotoSansDuployanChinook-Regular.ttf'));
-  // const fontUrl = 'data:font/ttf;base64,' + font.toString('base64');
+  // const font = fs.readFileSync(path.join(__dirname, 'fonts', 'NotoSansDuployanChinook-Regular.woff2'));
+  // const fontUrl = 'data:font/woff2;base64,' + font.toString('base64');
   const font = fs.readFileSync(path.join(__dirname, 'fonts', 'RawndMusmusDuployan-Regular.woff2'));
   const fontUrl = 'data:font/woff2;base64,' + font.toString('base64');
   const cards = JSON.parse(fs.readFileSync(cardsPath, 'utf8'));

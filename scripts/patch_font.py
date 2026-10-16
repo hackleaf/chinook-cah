@@ -12,10 +12,11 @@ Each rule says: in context SEQ, draw OU the way it is drawn in context LIKE.
 Glyph IDs are discovered by shaping both sequences with HarfBuzz, so the rules
 don't depend on the font's internal glyph names.
 
-Usage: python3 scripts/patch_font.py [input.ttf] [output.ttf]
-Requires: pip install fonttools uharfbuzz
+Usage: python3 scripts/patch_font.py [input.woff2] [output.woff2]
+Requires: pip install fonttools uharfbuzz brotli
 """
 
+import io
 import sys
 import unicodedata
 from pathlib import Path
@@ -26,8 +27,8 @@ from fontTools.ttLib import TTFont
 from fontTools.ttLib.tables import otTables
 
 ROOT = Path(__file__).resolve().parent.parent
-SRC = ROOT / 'fonts' / 'NotoSansDuployan-Regular.ttf'
-DST = ROOT / 'fonts' / 'NotoSansDuployanChinook-Regular.ttf'
+SRC = ROOT / 'fonts' / 'NotoSansDuployan-Regular.woff2'
+DST = ROOT / 'fonts' / 'NotoSansDuployanChinook-Regular.woff2'
 FAMILY = 'Noto Sans Duployan Chinook'
 
 # (sequence to fix, sequence whose OU glyph to use instead)
@@ -69,7 +70,12 @@ def main():
     src = Path(sys.argv[1]) if len(sys.argv) > 1 else SRC
     dst = Path(sys.argv[2]) if len(sys.argv) > 2 else DST
     tt = TTFont(src)
-    hb_font = hb.Font(hb.Face(hb.Blob.from_file_path(str(src))))
+    # HarfBuzz reads uncompressed fonts only, so shape from an in-memory copy.
+    raw = TTFont(src)
+    raw.flavor = None
+    buf = io.BytesIO()
+    raw.save(buf)
+    hb_font = hb.Font(hb.Face(hb.Blob(buf.getvalue())))
 
     mapping = {}
     for seq, like in RULES:
@@ -100,6 +106,7 @@ def main():
         elif rec.nameID == 6:
             rec.string = str(rec.toUnicode()).replace('NotoSansDuployan', FAMILY.replace(' ', ''))
 
+    tt.flavor = 'woff2' if dst.suffix == '.woff2' else None
     tt.save(dst)
     print(f'wrote {dst}')
 
