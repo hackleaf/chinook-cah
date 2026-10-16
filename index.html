@@ -1,0 +1,731 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Chinook Against Humanity</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400;1,700&family=IBM+Plex+Mono:wght@400;500&family=Instrument+Serif&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+@font-face {
+  font-family: "Duployan Chinook";
+  src: url("fonts/NotoSansDuployanChinook-Regular.ttf") format("truetype");
+  font-display: block;
+}
+
+/* Layout: a working table. The new-card editor sits on top as the main surface;
+   the deck spreads out below as a grid of real card faces. */
+:root {
+  --bg: #e9eeec;          /* cool river-stone grey, slight teal bias */
+  --surface: #f7f9f8;
+  --line: #c9d2cf;
+  --fg: #16201e;
+  --muted: #56645f;
+  --accent: #0e6468;      /* deep Pacific teal */
+  --accent-fg: #ffffff;
+  --err: #c0262d;
+  --err-bg: #ffd3d3;
+  --focus: #0e6468;
+  --card-black: #121212;
+  --card-white: #fdfdfb;
+  --card-ink-light: #fdfdfb;
+  --card-ink-dark: #121212;
+  --card-edge: #cfd5d2;
+
+  --display: "Instrument Serif", "Iowan Old Style", Georgia, serif;
+  --body: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --dupl: "Duployan Chinook", sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111716; --surface: #182120; --line: #2c3a37; --fg: #e4ecea; --muted: #97a7a2;
+    --accent: #4fb6b4; --accent-fg: #06201f; --err: #ff6b6b; --err-bg: #5a1d22; --focus: #4fb6b4;
+    --card-edge: #3a4744;
+    color-scheme: dark;
+  }
+}
+
+html { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 16px/1.5 var(--body);
+}
+[hidden] { display: none !important; }
+.wrap {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding-block: 28px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid;
+  gap: 32px;
+}
+
+/* Header */
+.masthead { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.masthead h1 {
+  margin: 0;
+  font: 400 clamp(2.2rem, 5vw, 3.2rem)/1 var(--display);
+  letter-spacing: -0.01em;
+  display: flex; align-items: baseline; gap: 14px;
+  text-wrap: balance;
+}
+.masthead .mark { font-family: var(--dupl); font-size: 0.8em; color: var(--accent); line-height: 1; }
+.masthead-side { display: grid; gap: 8px; justify-items: end; }
+.tally { font: 500 0.85rem/1.4 var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.toolbar { display: flex; gap: 8px; flex-wrap: wrap; }
+@media (max-width: 520px) { .masthead-side { justify-items: start; } }
+
+.banner {
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  padding: 14px 18px;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+}
+.banner p { margin: 0; min-width: 0; }
+.banner.is-error { border-color: var(--err); color: var(--err); }
+
+/* Editor */
+.editor {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: clamp(16px, 3vw, 28px);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(200px, 280px);
+  gap: clamp(20px, 4vw, 40px);
+  align-items: start;
+}
+.editor.is-editing { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+@media (max-width: 720px) { .editor { grid-template-columns: minmax(0, 1fr); } .editor .preview-col { max-width: 260px; } }
+
+.editor h2 { margin: 0; font: 400 2rem/1.1 var(--display); text-wrap: balance; }
+.form { display: grid; gap: 18px; min-width: 0; }
+
+.field { display: grid; gap: 6px; min-width: 0; }
+.field label {
+  font: 700 0.78rem/1.2 var(--body);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+.field label code { font: 500 0.72rem var(--mono); text-transform: none; letter-spacing: 0; color: var(--muted); opacity: 0.8; }
+.hint { font-size: 0.85rem; color: var(--muted); margin: 0; }
+.hint code { font: 500 0.85em var(--mono); color: var(--fg); }
+
+.text-input {
+  width: 100%;
+  box-sizing: border-box;
+  font: 400 1.05rem/1.4 var(--body);
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.text-input:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+
+/* The dup field: a transparent input over a mirror that marks the first bad letter. */
+.dup-field {
+  position: relative;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.dup-field:focus-within { outline: 2px solid var(--focus); outline-offset: 1px; }
+.dup-field.has-error { border-color: var(--err); }
+.dup-backdrop, #f-dup {
+  font: 500 1.05rem/1.4 var(--mono);
+  letter-spacing: 0;
+  padding: 10px 12px;
+  margin: 0;
+  border: 0;
+  box-sizing: border-box;
+  white-space: pre;
+}
+.dup-backdrop {
+  position: absolute; inset: 0;
+  overflow: hidden;
+  color: transparent;
+  pointer-events: none;
+}
+.dup-backdrop mark {
+  color: transparent;
+  background: var(--err-bg);
+  border-radius: 3px;
+  box-shadow: 0 0 0 1.5px var(--err);
+}
+#f-dup {
+  position: relative;
+  width: 100%;
+  background: transparent;
+  color: var(--fg);
+  outline: none;
+}
+.dup-error { margin: 0; font-size: 0.88rem; color: var(--err); min-height: 1.3em; }
+.dup-error code { font: 500 0.95em var(--mono); }
+
+.letters { font-size: 0.85rem; color: var(--muted); }
+.letters summary { cursor: pointer; width: fit-content; }
+.letters summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
+.letters dl { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 4px 16px; margin: 10px 0 0; }
+.letters dl div { display: flex; gap: 8px; align-items: baseline; }
+.letters dt { margin: 0; min-width: 2.2em; }
+.letters dt code { font: 500 0.95em var(--mono); color: var(--fg); }
+.letters dd { margin: 0; font-family: var(--dupl); font-size: 1.2rem; color: var(--fg); }
+
+.klale { display: flex; align-items: center; gap: 10px; cursor: pointer; width: fit-content; }
+.klale input { width: 20px; height: 20px; accent-color: var(--card-black); margin: 0; }
+.klale span { font-weight: 700; }
+.klale small { color: var(--muted); font-size: 0.85rem; font-weight: 400; }
+
+.actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.btn {
+  font: 700 1rem/1 var(--body);
+  border-radius: 999px;
+  padding: 12px 22px;
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+.btn-sm { font-size: 0.88rem; padding: 9px 16px; }
+.btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.btn-primary { background: var(--accent); color: var(--accent-fg); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn-quiet { background: transparent; color: var(--fg); border-color: var(--line); }
+.btn-danger { background: transparent; color: var(--err); border-color: var(--err); }
+.btn-danger.is-armed { background: var(--err); color: var(--card-white); }
+.status { font-size: 0.9rem; color: var(--muted); }
+.status.is-error { color: var(--err); }
+
+.preview-col { display: grid; gap: 8px; justify-items: center; width: 100%; }
+.preview-col .label { justify-self: start; font: 700 0.78rem/1.2 var(--body); text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+#preview, .preview-col .card-frame { width: 100%; }
+
+/* Deck */
+.deck-head h2 { margin: 0; font: 400 1.8rem/1.1 var(--display); }
+.deck-head h2 .hint { font: 400 0.95rem/1 var(--body); margin-left: 6px; }
+.deck {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 190px), 1fr));
+  gap: 20px;
+  margin-top: 16px;
+}
+.deck-empty {
+  border: 1px dashed var(--line);
+  border-radius: 14px;
+  padding: 28px;
+  color: var(--muted);
+  text-align: center;
+  margin-top: 16px;
+}
+.deck-item {
+  display: block;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  border-radius: 6%;
+  text-align: left;
+  transition: transform 160ms ease;
+}
+.deck-item:hover { transform: translateY(-3px); }
+.deck-item:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+.deck-item.is-current { outline: 3px solid var(--accent); outline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) { .deck-item { transition: none; } .deck-item:hover { transform: none; } }
+
+/* Card face, sized from its own width (750 x 1050 like the PNG renderer). */
+.card-frame { container-type: inline-size; max-width: 100%; }
+.card {
+  aspect-ratio: 750 / 1050;
+  box-sizing: border-box;
+  border-radius: 5.3cqw;
+  padding: 8.5cqw 8cqw;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  overflow: hidden;
+  font-family: "DejaVu Sans", var(--body);
+}
+.card.is-black { background: var(--card-black); color: var(--card-ink-light); }
+.card.is-white { background: var(--card-white); color: var(--card-ink-dark); box-shadow: inset 0 0 0 1px var(--card-edge); }
+.c-dup { font-family: var(--dupl), sans-serif; font-size: 9.6cqw; line-height: 2.2; padding-left: 2.7cqw; overflow-wrap: anywhere; }
+.c-chn { font-size: 6.1cqw; font-weight: 700; line-height: 1.3; overflow-wrap: anywhere; }
+.c-en { font-size: 4cqw; line-height: 1.35; opacity: 0.72; transform: rotate(180deg); overflow-wrap: anywhere; }
+.blank { display: inline-block; width: 3.5em; border-bottom: 0.08em solid currentColor; }
+.c-dup .blank { width: 2em; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="masthead">
+    <h1><span>Chinook Against Humanity</span><span class="mark" aria-hidden="true">&#x1BC5C;&#x1BC5C;</span></h1>
+    <div class="masthead-side">
+      <div class="tally" id="tally" aria-live="polite"></div>
+      <div class="toolbar">
+        <button class="btn btn-quiet btn-sm" id="export" type="button">Export .zip</button>
+        <button class="btn btn-quiet btn-sm" id="import" type="button">Import .zip</button>
+        <input id="import-file" type="file" accept=".zip,application/zip" hidden>
+      </div>
+    </div>
+  </header>
+
+  <div class="banner" id="banner" role="status" hidden>
+    <p id="banner-text"></p>
+    <div class="actions" id="banner-actions">
+      <button class="btn btn-primary btn-sm" id="banner-ok" type="button">Replace deck</button>
+      <button class="btn btn-quiet btn-sm" id="banner-cancel" type="button">Cancel</button>
+    </div>
+  </div>
+
+  <section class="editor" id="editor" aria-labelledby="editor-title">
+    <form class="form" id="form" novalidate>
+      <h2 id="editor-title">New card</h2>
+
+      <div class="field">
+        <label for="f-dup">Duployan spelling <code>dup</code></label>
+        <div class="dup-field" id="dup-field">
+          <div class="dup-backdrop" id="dup-backdrop" aria-hidden="true"></div>
+          <input id="f-dup" name="dup" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="dup-error dup-hint">
+        </div>
+        <p class="dup-error" id="dup-error" aria-live="polite"></p>
+        <p class="hint" id="dup-hint">A dash breaks the stroke between syllables (<code>ka-na-wi</code>). An apostrophe splits letters that would otherwise join: <code>owa</code> is ow&nbsp;+&nbsp;a, <code>o'wa</code> is o&nbsp;+&nbsp;wa.</p>
+        <details class="letters">
+          <summary>Letters you can use</summary>
+          <dl id="letters"></dl>
+        </details>
+      </div>
+
+      <div class="field">
+        <label for="f-chn">Chinook <code>chn</code></label>
+        <input class="text-input" id="f-chn" name="chn" type="text" autocomplete="off" spellcheck="false">
+      </div>
+
+      <div class="field">
+        <label for="f-en">English <code>en</code></label>
+        <input class="text-input" id="f-en" name="en" type="text" autocomplete="off">
+        <p class="hint">Use <code>_</code> for a blank and <code>*stars*</code> for italics, in Chinook and English.</p>
+      </div>
+
+      <label class="klale" for="f-klale">
+        <input id="f-klale" name="klale" type="checkbox">
+        <span>klale <small>black card</small></span>
+      </label>
+
+      <div class="actions">
+        <button class="btn btn-primary" id="save" type="submit">Add card</button>
+        <button class="btn btn-quiet" id="cancel" type="button" hidden>Cancel</button>
+        <button class="btn btn-danger" id="delete" type="button" hidden>Delete card</button>
+        <span class="status" id="status" role="status"></span>
+      </div>
+    </form>
+
+    <div class="preview-col">
+      <span class="label">Preview</span>
+      <div id="preview"></div>
+    </div>
+  </section>
+
+  <section class="deck-head" aria-labelledby="deck-title">
+    <h2 id="deck-title">Deck <span class="hint">(tap card to edit)</span></h2>
+    <div class="deck" id="deck"></div>
+    <div class="deck-empty" id="deck-empty">Loading cards…</div>
+  </section>
+</div>
+
+<script>
+// ----- Duployan converter (same rules as render.js) -----
+const LETTERS = {
+  a: 0x1bc41, o: 0x1bc44, oo: 0x1bc5b, ow: 0x1bc5a, wa: 0x1bc5c, wo: 0x1bc5d, wi: 0x1bc5e,
+  e: 0x1bc47, i: 0x1bc46,
+  h: 0x1bc00, p: 0x1bc02, b: 0x1bc07, t: 0x1bc03, d: 0x1bc08, k: 0x1bc05, g: 0x1bc0a,
+  f: 0x1bc04, v: 0x1bc09, l: 0x1bc06, r: 0x1bc0b, m: 0x1bc19, n: 0x1bc1a,
+  s: 0x1bc1c, sh: 0x1bc1b, ch: 0x1bc23, ts: 0x1bc25, th: 0x1bc11,
+};
+const KEYS = Object.keys(LETTERS).sort((a, b) => b.length - a.length);
+const PASSTHROUGH = /[\s_.,;:!?"()]/;
+const ZWNJ = '‌';
+
+function toDuployan(dup) {
+  const src = dup.toLowerCase();
+  let out = '';
+  let i = 0;
+  while (i < src.length) {
+    const ch = src[i];
+    if (ch === "'") { i++; continue; }
+    if (ch === '-') { out += ZWNJ; i++; continue; }
+    if (PASSTHROUGH.test(ch)) { out += ch; i++; continue; }
+    const key = KEYS.find((k) => src.startsWith(k, i));
+    if (!key) {
+      const bad = Array.from(dup.slice(i))[0];
+      return { text: out, error: { index: i, char: bad } };
+    }
+    out += String.fromCodePoint(LETTERS[key]);
+    i += key.length;
+  }
+  return { text: out, error: null };
+}
+
+// ----- Card rendering -----
+function fillText(el, s, italics) {
+  const re = italics ? /(_+)|\*([^*]+)\*/g : /(_+)/g;
+  let last = 0, m;
+  while ((m = re.exec(s))) {
+    if (m.index > last) el.append(s.slice(last, m.index));
+    if (m[1]) {
+      const b = document.createElement('span');
+      b.className = 'blank';
+      el.append(b);
+    } else {
+      const em = document.createElement('em');
+      fillText(em, m[2], false);
+      el.append(em);
+    }
+    last = re.lastIndex;
+  }
+  if (last < s.length) el.append(s.slice(last));
+}
+
+function cardFace(card) {
+  const frame = document.createElement('div');
+  frame.className = 'card-frame';
+  const c = document.createElement('div');
+  c.className = 'card ' + (card.klale ? 'is-black' : 'is-white');
+  const dup = document.createElement('div');
+  dup.className = 'c-dup';
+  fillText(dup, toDuployan(card.dup || '').text, false);
+  const chn = document.createElement('div');
+  chn.className = 'c-chn';
+  fillText(chn, card.chn || '', true);
+  const en = document.createElement('div');
+  en.className = 'c-en';
+  fillText(en, card.en || '', true);
+  c.append(dup, chn, en);
+  frame.append(c);
+  return frame;
+}
+
+// ----- Storage (this browser only) -----
+const STORE_KEY = 'chinook-cah.cards.v1';
+let storageOk = true;
+
+const newId = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
+
+function normalize(list) {
+  const base = Date.now();
+  return list
+    .filter((c) => c && typeof c === 'object')
+    .map((c, i) => ({
+      id: typeof c.id === 'string' && c.id ? c.id : newId(),
+      dup: String(c.dup ?? ''),
+      chn: String(c.chn ?? ''),
+      en: String(c.en ?? ''),
+      klale: !!c.klale,
+      created: Number.isFinite(c.created) ? c.created : base + i,
+    }));
+}
+
+function loadStored() {
+  try {
+    const raw = localStorage.getItem(STORE_KEY);
+    if (raw === null) return null;
+    const list = JSON.parse(raw);
+    return Array.isArray(list) ? normalize(list) : null;
+  } catch {
+    storageOk = false;
+    return null;
+  }
+}
+
+function persist() {
+  try {
+    localStorage.setItem(STORE_KEY, JSON.stringify(cards));
+    storageOk = true;
+  } catch {
+    storageOk = false;
+  }
+  if (!storageOk) showBanner('This browser isn’t saving cards (private browsing or blocked site data). Export a .zip to keep them.', { error: true });
+}
+
+// ----- Editor -----
+const DEFAULTS = { dup: 'klahowia', chn: 'klahowya, kanawi ilihi', en: 'Hello, world', klale: false };
+const $ = (id) => document.getElementById(id);
+const els = {
+  editor: $('editor'), form: $('form'), title: $('editor-title'),
+  dup: $('f-dup'), chn: $('f-chn'), en: $('f-en'), klale: $('f-klale'),
+  dupField: $('dup-field'), backdrop: $('dup-backdrop'), dupError: $('dup-error'),
+  save: $('save'), cancel: $('cancel'), del: $('delete'), status: $('status'),
+  preview: $('preview'), deck: $('deck'), deckEmpty: $('deck-empty'), tally: $('tally'),
+  exportBtn: $('export'), importBtn: $('import'), importFile: $('import-file'),
+  banner: $('banner'), bannerText: $('banner-text'), bannerActions: $('banner-actions'),
+  bannerOk: $('banner-ok'), bannerCancel: $('banner-cancel'),
+};
+
+let editingId = null;   // null: new card
+let cards = [];         // newest first
+
+function formCard() {
+  return { dup: els.dup.value, chn: els.chn.value, en: els.en.value, klale: els.klale.checked };
+}
+
+function setForm(card) {
+  els.dup.value = card.dup || '';
+  els.chn.value = card.chn || '';
+  els.en.value = card.en || '';
+  els.klale.checked = !!card.klale;
+  refresh();
+}
+
+function syncBackdrop() {
+  els.backdrop.scrollLeft = els.dup.scrollLeft;
+}
+
+function refresh() {
+  const card = formCard();
+  const { error } = toDuployan(card.dup);
+
+  // Mirror the dup text and mark the first letter the converter can't read.
+  els.backdrop.replaceChildren();
+  if (error) {
+    const v = card.dup;
+    const end = error.index + error.char.length;
+    const mark = document.createElement('mark');
+    mark.textContent = v.slice(error.index, end);
+    els.backdrop.append(v.slice(0, error.index), mark, v.slice(end));
+    els.dupError.replaceChildren(
+      'No Duployan letter for ',
+      Object.assign(document.createElement('code'), { textContent: '“' + error.char + '”' }),
+      ` (character ${error.index + 1}). Respell it, or open “Letters you can use”.`
+    );
+  } else {
+    els.backdrop.textContent = card.dup;
+    els.dupError.textContent = '';
+  }
+  els.dupField.classList.toggle('has-error', !!error);
+  els.dup.setAttribute('aria-invalid', error ? 'true' : 'false');
+  syncBackdrop();
+
+  els.preview.replaceChildren(cardFace(card));
+  const empty = !card.dup.trim() && !card.chn.trim() && !card.en.trim();
+  els.save.disabled = !!error || empty;
+}
+
+function say(msg) {
+  els.status.textContent = msg;
+}
+
+function disarmDelete() {
+  els.del.classList.remove('is-armed');
+  els.del.textContent = 'Delete card';
+}
+
+function startNew() {
+  editingId = null;
+  els.title.textContent = 'New card';
+  els.save.textContent = 'Add card';
+  els.cancel.hidden = true;
+  els.del.hidden = true;
+  els.editor.classList.remove('is-editing');
+  disarmDelete();
+  setForm(DEFAULTS);
+  markCurrent();
+}
+
+function startEdit(card) {
+  editingId = card.id;
+  els.title.textContent = 'Edit card';
+  els.save.textContent = 'Save changes';
+  els.cancel.hidden = false;
+  els.del.hidden = false;
+  els.editor.classList.add('is-editing');
+  disarmDelete();
+  say('');
+  setForm(card);
+  markCurrent();
+  els.editor.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+  els.dup.focus({ preventScroll: true });
+}
+
+els.form.addEventListener('submit', (ev) => {
+  ev.preventDefault();
+  if (els.save.disabled) return;
+  const card = formCard();
+  if (editingId) {
+    cards = cards.map((c) => (c.id === editingId ? { ...c, ...card } : c));
+    persist();
+    renderDeck();
+    startNew();
+    say('Saved.');
+  } else {
+    cards = [{ id: newId(), ...card, created: Date.now() }, ...cards];
+    persist();
+    renderDeck();
+    startNew();
+    say('Card added.');
+  }
+});
+
+els.cancel.addEventListener('click', () => { startNew(); say(''); });
+
+els.del.addEventListener('click', () => {
+  if (!editingId) return;
+  if (!els.del.classList.contains('is-armed')) {
+    els.del.classList.add('is-armed');
+    els.del.textContent = 'Tap again to delete';
+    return;
+  }
+  cards = cards.filter((c) => c.id !== editingId);
+  persist();
+  renderDeck();
+  startNew();
+  say('Card deleted.');
+});
+
+for (const el of [els.dup, els.chn, els.en, els.klale]) {
+  el.addEventListener('input', () => { disarmDelete(); refresh(); });
+}
+for (const type of ['scroll', 'keyup', 'click', 'select', 'focus']) {
+  els.dup.addEventListener(type, syncBackdrop);
+}
+
+// Letters legend
+(function buildLegend() {
+  const order = ['a','e','i','o','oo','ow','wa','wo','wi','p','b','t','d','k','g','f','v','th','ch','ts','s','sh','h','l','r','m','n'];
+  for (const k of order) {
+    const row = document.createElement('div');
+    const dt = document.createElement('dt');
+    dt.append(Object.assign(document.createElement('code'), { textContent: k }));
+    const dd = document.createElement('dd');
+    dd.textContent = String.fromCodePoint(LETTERS[k]);
+    row.append(dt, dd);
+    $('letters').append(row);
+  }
+})();
+
+// ----- Deck -----
+function markCurrent() {
+  for (const btn of els.deck.children) btn.classList.toggle('is-current', btn.dataset.id === editingId);
+}
+
+function renderDeck() {
+  els.deck.replaceChildren();
+  for (const card of cards) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'deck-item';
+    btn.dataset.id = card.id;
+    btn.setAttribute('aria-label', 'Edit card: ' + (card.chn || card.en || card.dup || 'blank'));
+    btn.append(cardFace(card));
+    btn.addEventListener('click', () => startEdit(card));
+    els.deck.append(btn);
+  }
+  markCurrent();
+  const black = cards.filter((c) => c.klale).length;
+  els.tally.textContent = `${cards.length} card${cards.length === 1 ? '' : 's'} · ${black} klale · ${cards.length - black} white`;
+  els.deckEmpty.hidden = cards.length > 0;
+  els.deckEmpty.textContent = 'No cards yet. Add the first one with the form above, or import a .zip.';
+}
+
+// ----- Banner (import confirmation and storage notices) -----
+let bannerAction = null;
+
+function showBanner(text, { confirm = null, error = false } = {}) {
+  els.bannerText.textContent = text;
+  els.banner.classList.toggle('is-error', error);
+  bannerAction = confirm;
+  els.bannerOk.hidden = !confirm;
+  els.bannerCancel.textContent = confirm ? 'Cancel' : 'Dismiss';
+  els.banner.hidden = false;
+}
+
+function hideBanner() {
+  els.banner.hidden = true;
+  bannerAction = null;
+}
+
+els.bannerOk.addEventListener('click', () => { const run = bannerAction; hideBanner(); if (run) run(); });
+els.bannerCancel.addEventListener('click', hideBanner);
+
+// ----- Export / import (.zip holding cards.json) -----
+function exportList() {
+  return [...cards]
+    .sort((a, b) => a.created - b.created)
+    .map(({ chn, dup, en, klale }) => ({ chn, dup, en, klale }));
+}
+
+els.exportBtn.addEventListener('click', async () => {
+  if (!window.JSZip) { showBanner('The zip library didn’t load. Check your connection and reload the page.', { error: true }); return; }
+  const zip = new JSZip();
+  zip.file('cards.json', JSON.stringify(exportList(), null, 2) + '\n');
+  const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `chinook-cah-cards-${new Date().toISOString().slice(0, 10)}.zip`;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  say(`Exported ${cards.length} card${cards.length === 1 ? '' : 's'}.`);
+});
+
+els.importBtn.addEventListener('click', () => {
+  if (!window.JSZip) { showBanner('The zip library didn’t load. Check your connection and reload the page.', { error: true }); return; }
+  els.importFile.value = '';
+  els.importFile.click();
+});
+
+els.importFile.addEventListener('change', async () => {
+  const file = els.importFile.files[0];
+  if (!file) return;
+  let list;
+  try {
+    const zip = await JSZip.loadAsync(file);
+    const entry = zip.file('cards.json') || zip.file(/(^|\/)cards\.json$/)[0];
+    if (!entry) { showBanner(`${file.name} has no cards.json inside.`, { error: true }); return; }
+    list = JSON.parse(await entry.async('string'));
+  } catch {
+    showBanner(`${file.name} isn’t a zip with a readable cards.json.`, { error: true });
+    return;
+  }
+  if (!Array.isArray(list)) { showBanner('cards.json should be a list of cards.', { error: true }); return; }
+  const incoming = normalize(list).reverse();   // file is oldest first; deck shows newest first
+  showBanner(
+    `Replace your ${cards.length} card${cards.length === 1 ? '' : 's'} with the ${incoming.length} in ${file.name}?`,
+    { confirm: () => {
+      cards = incoming;
+      persist();
+      startNew();
+      renderDeck();
+      say(`Imported ${incoming.length} card${incoming.length === 1 ? '' : 's'}.`);
+    } }
+  );
+});
+
+// ----- Boot -----
+startNew();
+
+(async () => {
+  const stored = loadStored();
+  if (stored) {
+    cards = stored.sort((a, b) => b.created - a.created);
+  } else {
+    // First visit: start from the deck in the repo.
+    try {
+      const res = await fetch('cards.json', { cache: 'no-cache' });
+      cards = normalize(await res.json()).reverse();
+    } catch {
+      cards = [];
+    }
+    persist();
+  }
+  renderDeck();
+})();
+</script>
+</body>
+</html>

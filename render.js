@@ -93,13 +93,14 @@ html, body { margin: 0; background: transparent; }
   font-family: "DejaVu Sans", sans-serif;
   display: flex; flex-direction: column; justify-content: space-between;
 }
+.card.white { background: #fdfdfb; color: #121212; box-shadow: inset 0 0 0 2px #cfd5d2; }
 .dup { font-family: Dup, "DejaVu Sans", sans-serif; font-size: 72px; line-height: 2.2; padding-left: 20px; }
 .chn { font-size: 46px; font-weight: bold; line-height: 1.3; }
-.en { font-size: 30px; line-height: 1.35; color: #bbb; transform: rotate(180deg); }
+.en { font-size: 30px; line-height: 1.35; opacity: 0.72; transform: rotate(180deg); }
 .blank { display: inline-block; width: 3.5em; border-bottom: 0.08em solid currentColor; }
 .dup .blank { width: 2em; }
 </style>
-<div class="card">
+<div class="card${card.klale ? '' : ' white'}">
   <div class="dup">${withBlanks(duployan)}</div>
   <div class="chn">${latin(card.chn)}</div>
   <div class="en">${latin(card.en)}</div>
