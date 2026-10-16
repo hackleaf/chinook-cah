@@ -27,6 +27,8 @@
   --accent-fg: #ffffff;
   --err: #c0262d;
   --err-bg: #ffd3d3;
+  --warn: #8a6a00;
+  --warn-bg: #fff2a8;
   --focus: #0e6468;
   --card-black: #121212;
   --card-white: #fdfdfb;
@@ -43,7 +45,7 @@
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #111716; --surface: #182120; --line: #2c3a37; --fg: #e4ecea; --muted: #97a7a2;
-    --accent: #4fb6b4; --accent-fg: #06201f; --err: #ff6b6b; --err-bg: #5a1d22; --focus: #4fb6b4;
+    --accent: #4fb6b4; --accent-fg: #06201f; --err: #ff6b6b; --err-bg: #5a1d22; --warn: #e3c35a; --warn-bg: #4d4214; --focus: #4fb6b4;
     --card-edge: #3a4744;
     color-scheme: dark;
   }
@@ -141,6 +143,7 @@ body {
 }
 .dup-field:focus-within { outline: 2px solid var(--focus); outline-offset: 1px; }
 .dup-field.has-error { border-color: var(--err); }
+.dup-field.has-partial { border-color: var(--warn); }
 .dup-backdrop, #f-dup {
   font: 500 1.05rem/1.4 var(--mono);
   letter-spacing: 0;
@@ -170,6 +173,8 @@ body {
   outline: none;
 }
 .dup-error { margin: 0; font-size: 0.88rem; color: var(--err); min-height: 1.3em; }
+.dup-error.is-partial { color: var(--warn); }
+.dup-backdrop mark.is-partial { background: var(--warn-bg); box-shadow: 0 0 0 1.5px var(--warn); }
 .dup-error code { font: 500 0.95em var(--mono); }
 
 .letters { font-size: 0.85rem; color: var(--muted); }
@@ -490,24 +495,35 @@ function refresh() {
   const card = formCard();
   const { error } = toDuployan(card.dup);
 
-  // Mirror the dup text and mark the first letter the converter can't read.
+  // Mirror the dup text and mark the first letter the converter can't read:
+  // pale yellow when it only starts a longer letter (w → wa/wo/wi), red otherwise.
   els.backdrop.replaceChildren();
+  const partial = error ? KEYS.filter((k) => k.length > 1 && k.startsWith(error.char.toLowerCase())) : [];
   if (error) {
     const v = card.dup;
     const end = error.index + error.char.length;
     const mark = document.createElement('mark');
     mark.textContent = v.slice(error.index, end);
+    mark.classList.toggle('is-partial', partial.length > 0);
     els.backdrop.append(v.slice(0, error.index), mark, v.slice(end));
-    els.dupError.replaceChildren(
-      'No Duployan letter for ',
-      Object.assign(document.createElement('code'), { textContent: '“' + error.char + '”' }),
-      ` (character ${error.index + 1}). Respell it, or open “Letters you can use”.`
-    );
+    const code = (t) => Object.assign(document.createElement('code'), { textContent: t });
+    if (partial.length) {
+      const options = partial.sort().flatMap((k, i) => [i ? (i === partial.length - 1 ? ' or ' : ', ') : '', code(k)]);
+      els.dupError.replaceChildren(code('“' + error.char + '”'), ` (character ${error.index + 1}) needs another letter: `, ...options, '.');
+    } else {
+      els.dupError.replaceChildren(
+        'No Duployan letter for ',
+        code('“' + error.char + '”'),
+        ` (character ${error.index + 1}). Respell it, or open “Letters you can use”.`
+      );
+    }
   } else {
     els.backdrop.textContent = card.dup;
     els.dupError.textContent = '';
   }
-  els.dupField.classList.toggle('has-error', !!error);
+  els.dupError.classList.toggle('is-partial', partial.length > 0);
+  els.dupField.classList.toggle('has-error', !!error && !partial.length);
+  els.dupField.classList.toggle('has-partial', partial.length > 0);
   els.dup.setAttribute('aria-invalid', error ? 'true' : 'false');
   syncBackdrop();
 
