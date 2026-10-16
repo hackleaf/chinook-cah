@@ -166,6 +166,38 @@ body {
 }
 @media (prefers-reduced-motion: reduce) { .editor, .editor.is-open { transition: none; } }
 
+.btn-fix { background: var(--fuzzy-bg); color: var(--fuzzy); border-color: var(--fuzzy); }
+.x-btn {
+  display: inline-grid; place-items: center;
+  width: 40px; height: 40px; flex: none;
+  font: 400 1.8rem/1 var(--body);
+  border: 1px solid var(--line); border-radius: 50%;
+  background: transparent; color: var(--fg); cursor: pointer;
+}
+.x-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.fix {
+  box-sizing: border-box;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--fg);
+  padding: 22px;
+  width: min(560px, calc(100% - 32px));
+  max-height: calc(100dvh - 48px);
+  overflow: auto;
+}
+.fix[open] { display: grid; gap: 14px; align-content: start; }
+.fix::backdrop { background: rgb(0 0 0 / 0.45); }
+.fix h2 { margin: 0; font: 400 2rem/1.1 var(--display); }
+@media (max-width: 899px) {
+  .fix {
+    width: 100%; max-width: none; height: 100%; max-height: none; margin: 0;
+    border: 0; border-radius: 0;
+    padding-block: calc(env(safe-area-inset-top, 0px) + 14px) calc(env(safe-area-inset-bottom, 0px) + 24px);
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+}
 .toast {
   position: fixed;
   left: 50%;
@@ -258,7 +290,7 @@ body {
 .word-row { display: contents; }
 .word-row .pill { justify-self: start; }
 .word-row .dup-error { grid-column: 2 / -1; }
-.field label.word-chn { font: 700 1rem/1.3 var(--body); text-transform: none; letter-spacing: 0; color: var(--fg); overflow-wrap: anywhere; }
+label.word-chn { font: 700 1rem/1.3 var(--body); text-transform: none; letter-spacing: 0; color: var(--fg); overflow-wrap: anywhere; }
 .word-row.is-fuzzy .dup-field:not(.has-error):not(.has-partial) { background: var(--fuzzy-bg); border-color: var(--fuzzy); }
 .pill {
   display: inline-block;
@@ -378,12 +410,22 @@ body {
 </head>
 <body>
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+<dialog class="fix" id="fix" aria-labelledby="fix-title">
+  <div class="editor-head">
+    <h2 id="fix-title">Fix spelling</h2>
+    <button class="x-btn" id="fix-close" type="button" aria-label="Close Fix spelling">×</button>
+  </div>
+  <p class="hint">These words on your cards are still <span class="pill is-fuzzy">ilu ts'im</span>. Correct a spelling, or press <strong>✓</strong> if it’s already right. Changes are saved as you go.</p>
+  <div class="words" id="fix-words"></div>
+  <div class="actions"><button class="btn btn-primary" id="fix-done" type="button">Done</button></div>
+</dialog>
 <div class="wrap">
   <header class="masthead">
     <h1><span>Chinook Against Humanity</span><span class="mark" aria-hidden="true">&#x1BC5C;&#x1BC5C;</span></h1>
     <div class="masthead-side">
       <div class="tally" id="tally" aria-live="polite"></div>
       <div class="toolbar">
+        <button class="btn btn-fix btn-sm" id="fix-btn" type="button" hidden>Fix spelling</button>
         <button class="btn btn-quiet btn-sm" id="images" type="button">Download images</button>
         <button class="btn btn-quiet btn-sm" id="export" type="button">Export .zip</button>
         <button class="btn btn-quiet btn-sm" id="import" type="button">Import .zip</button>
@@ -442,7 +484,7 @@ body {
           <details class="letters">
             <summary>Spelling help</summary>
             <div class="help">
-              <p class="hint"><span class="pill is-fuzzy">fuzzy</span> spellings are guesses or haven’t been checked. Type in one, or press <strong>✓</strong>, to mark it <span class="pill is-verified">verified</span>. A word’s spelling is shared by every card that uses it.</p>
+              <p class="hint"><span class="pill is-fuzzy">ilu ts'im</span> spellings are guesses or haven’t been checked. Type in one, or press <strong>✓</strong>, to mark it <span class="pill is-verified">verified</span>. A word’s spelling is shared by every card that uses it.</p>
               <p class="hint">A dash breaks the stroke between syllables (<code>ka-na-wi</code>). An apostrophe splits letters that would otherwise join: <code>owa</code> is ow&nbsp;+&nbsp;a, <code>o'wa</code> is o&nbsp;+&nbsp;wa. A number after a letter picks an alternate form: <code>lo2</code> turns the o the other way (<code>lo\2</code> and <code>lo/2</code> work too).</p>
               <p class="hint">Use <code>_</code> for a blank and <code>*stars*</code> for italics, in Chinook and English.</p>
               <dl id="letters"></dl>
@@ -511,6 +553,8 @@ function cardFace(card, spell) {
 // ----- Storage (this browser only) -----
 const STORE_KEY = 'chinook-cah.cards.v1';
 const WORDS_KEY = 'chinook-cah.words.v1';
+const ADDED_KEY = 'chinook-cah.added.v1';   // set once someone adds a card of their own
+let userAdded = false;
 let storageOk = true;
 
 const newId = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
@@ -586,6 +630,7 @@ const els = {
   banner: $('banner'), bannerText: $('banner-text'), bannerActions: $('banner-actions'),
   bannerOk: $('banner-ok'), bannerCancel: $('banner-cancel'),
   newCard: $('new-card'), sheetClose: $('sheet-close'), toast: $('toast'),
+  fixBtn: $('fix-btn'), fix: $('fix'), fixWords: $('fix-words'), fixClose: $('fix-close'), fixDone: $('fix-done'),
 };
 
 // On narrow screens the editor is a sheet that slides over the deck.
@@ -656,16 +701,18 @@ function describeError(error) {
 
 // One row per distinct word: the word, its spelling (with the first unreadable
 // character marked), fuzzy/verified state, and a button to verify as is.
-function makeWordRow(w) {
+// opts.spelling(w) gives the state shown; opts.change(w, value, valid) is
+// called when the spelling is typed or accepted with ✓.
+function makeWordRow(w, opts) {
   const row = document.createElement('div');
   row.className = 'word-row';
   row.dataset.word = w;
-  const id = 'w-' + Array.from(w).map((c) => c.codePointAt(0).toString(36)).join('-');
+  const id = (opts.idPrefix || 'w-') + Array.from(w).map((c) => c.codePointAt(0).toString(36)).join('-');
   const label = Object.assign(document.createElement('label'), { className: 'word-chn', htmlFor: id, textContent: w });
   const field = Object.assign(document.createElement('div'), { className: 'dup-field' });
   const backdrop = Object.assign(document.createElement('div'), { className: 'dup-backdrop' });
   backdrop.setAttribute('aria-hidden', 'true');
-  const input = Object.assign(document.createElement('input'), { id, type: 'text', autocomplete: 'off', spellcheck: false, value: draftSpelling(w).dup });
+  const input = Object.assign(document.createElement('input'), { id, type: 'text', autocomplete: 'off', spellcheck: false, value: opts.spelling(w).dup });
   input.setAttribute('autocapitalize', 'off');
   field.append(backdrop, input);
   const pill = Object.assign(document.createElement('span'), { className: 'pill' });
@@ -678,17 +725,11 @@ function makeWordRow(w) {
 
   const sync = () => { backdrop.scrollLeft = input.scrollLeft; };
   for (const type of ['scroll', 'keyup', 'click', 'select', 'focus']) input.addEventListener(type, sync);
-  input.addEventListener('input', () => {
-    pending.set(w, { dup: input.value, verified: true });
-    disarmDelete();
-    refresh();
-  });
-  verify.addEventListener('click', () => {
-    pending.set(w, { dup: input.value, verified: true });
-    refresh();
-  });
+  const isValid = () => !!input.value.trim() && !toDuployan(input.value).error;
+  input.addEventListener('input', () => opts.change(w, input.value, isValid()));
+  verify.addEventListener('click', () => opts.change(w, input.value, isValid()));
   row.update = () => {
-    const sp = draftSpelling(w);
+    const sp = opts.spelling(w);
     const value = input.value;
     const { error } = toDuployan(value);
     const empty = !value.trim();
@@ -713,7 +754,7 @@ function makeWordRow(w) {
     input.setAttribute('aria-invalid', error || empty ? 'true' : 'false');
     row.classList.toggle('is-fuzzy', !sp.verified);
     pill.className = 'pill ' + (sp.verified ? 'is-verified' : 'is-fuzzy');
-    pill.textContent = sp.verified ? 'verified' : 'fuzzy';
+    pill.textContent = sp.verified ? 'verified' : "ilu ts'im";
     verify.disabled = sp.verified;
     sync();
     return !error && !empty;
@@ -721,13 +762,22 @@ function makeWordRow(w) {
   return row;
 }
 
+const editorRowOpts = {
+  spelling: draftSpelling,
+  change: (w, value) => {
+    pending.set(w, { dup: value, verified: true });
+    disarmDelete();
+    refresh();
+  },
+};
+
 function refresh() {
   const card = formCard();
 
   // Keep one row per distinct word, in order, reusing rows so typing isn't lost.
   const keys = wordsOf(card.chn);
   const existing = new Map([...els.words.children].map((r) => [r.dataset.word, r]));
-  const rows = keys.map((w) => existing.get(w) || makeWordRow(w));
+  const rows = keys.map((w) => existing.get(w) || makeWordRow(w, editorRowOpts));
   els.words.replaceChildren(...rows);
   els.wordsEmpty.hidden = keys.length > 0;
   const allValid = rows.map((r) => r.update()).every(Boolean);
@@ -800,6 +850,8 @@ els.form.addEventListener('submit', (ev) => {
     say('Saved.');
   } else {
     cards = [{ id: newId(), ...card, created: Date.now() }, ...cards];
+    userAdded = true;
+    try { localStorage.setItem(ADDED_KEY, 'true'); } catch {}
     persist();
     renderDeck();
     startNew();
@@ -816,7 +868,7 @@ els.newCard.addEventListener('click', () => {
   els.chn.focus({ preventScroll: true });
 });
 document.addEventListener('keydown', (ev) => {
-  if (ev.key === 'Escape' && els.editor.classList.contains('is-open')) els.sheetClose.click();
+  if (ev.key === 'Escape' && !els.fix.open && els.editor.classList.contains('is-open')) els.sheetClose.click();
 });
 narrow.addEventListener('change', () => { if (!narrow.matches) closeSheet(); });
 
@@ -861,6 +913,39 @@ els.klale.addEventListener('input', () => { promptTouched = true; disarmDelete()
   }
 })();
 
+// ----- Fix spelling: every ilu ts'im word on the cards, in one popup -----
+function fuzzyWords() {
+  const used = new Set(cards.flatMap((c) => wordsOf(c.chn)));
+  return [...used].filter((w) => !(words[w] && words[w].verified)).sort();
+}
+
+const fixRowOpts = {
+  idPrefix: 'fx-',
+  spelling: (w) => words[w] || { dup: guess(w), verified: false },
+  change: (w, value, valid) => {
+    // Only a spelling that converts is saved; until then the row shows the problem.
+    if (valid) {
+      words[w] = { dup: value, verified: true };
+      persist();
+      renderDeck();
+      els.words.replaceChildren();   // rebuild the editor's rows from the saved spellings
+      refresh();
+    }
+    const row = [...els.fixWords.children].find((r) => r.dataset.word === w);
+    if (row) row.update();
+  },
+};
+
+els.fixBtn.addEventListener('click', () => {
+  // The list is fixed while the popup is open, so rows don't jump as words get verified.
+  const rows = fuzzyWords().map((w) => makeWordRow(w, fixRowOpts));
+  els.fixWords.replaceChildren(...rows);
+  rows.forEach((r) => r.update());
+  els.fix.showModal();
+});
+els.fixClose.addEventListener('click', () => els.fix.close());
+els.fixDone.addEventListener('click', () => els.fix.close());
+
 // ----- Deck -----
 function markCurrent() {
   for (const btn of els.deck.children) btn.classList.toggle('is-current', btn.dataset.id === editingId);
@@ -880,9 +965,10 @@ function renderDeck() {
   }
   markCurrent();
   const black = cards.filter((c) => c.prompt).length;
-  const used = new Set(cards.flatMap((c) => wordsOf(c.chn)));
-  const fuzzy = [...used].filter((w) => !(words[w] && words[w].verified)).length;
-  els.tally.textContent = `${cards.length} card${cards.length === 1 ? '' : 's'} · ${black} klale · ${cards.length - black} white · ${fuzzy} fuzzy word${fuzzy === 1 ? '' : 's'}`;
+  const fuzzy = fuzzyWords().length;
+  els.tally.textContent = `${cards.length} card${cards.length === 1 ? '' : 's'} · ${black} klale · ${cards.length - black} tk'op · ${fuzzy} ilu ts'im`;
+  els.fixBtn.hidden = !(userAdded && fuzzy > 0);
+  els.fixBtn.textContent = `Fix spelling · ${fuzzy}`;
   els.deckEmpty.hidden = cards.length > 0;
   els.deckEmpty.textContent = 'No cards yet. Add the first one with the form above, or import a .zip.';
 }
@@ -1173,6 +1259,7 @@ startNew();
       return null;
     }
   };
+  userAdded = readJson(ADDED_KEY) === true;
   const storedWords = readJson(WORDS_KEY);
   const stored = readJson(STORE_KEY);
   const repoDeck = storedWords && Array.isArray(stored) ? null : parseDeck(await fetchJson('cards.json'));
