@@ -22,7 +22,10 @@ const LETTERS = {
   oo: 0x1bc5b, // OU
   ow: 0x1bc5a, // OW
   wa: 0x1bc5c, // WA
+  wo: 0x1bc5d, // WO
+  wi: 0x1bc5e, // WI
   e: 0x1bc47, // E
+  i: 0x1bc46, // I
   u: 0x1bc51, // U
   h: 0x1bc00, // H
   p: 0x1bc02, // P
@@ -33,6 +36,15 @@ const LETTERS = {
   sh: 0x1bc1b, // J
   n: 0x1bc1a, // N
   m: 0x1bc19, // M
+  ch: 0x1bc23, // J WITH DOT
+  ts: 0x1bc25, // S WITH DOT
+  th: 0x1bc11, // TH
+  b: 0x1bc07, // B
+  d: 0x1bc08, // D
+  f: 0x1bc04, // F
+  v: 0x1bc09, // V
+  g: 0x1bc0a, // G
+  r: 0x1bc0b, // R
 };
 const KEYS = Object.keys(LETTERS).sort((a, b) => b.length - a.length);
 const PASSTHROUGH = /[\s_.,;:!?"()]/;
@@ -79,7 +91,7 @@ html, body { margin: 0; background: transparent; }
   font-family: "DejaVu Sans", sans-serif;
   display: flex; flex-direction: column; justify-content: space-between;
 }
-.dup { font-family: Dup, "DejaVu Sans", sans-serif; font-size: 72px; line-height: 1.6; }
+.dup { font-family: Dup, "DejaVu Sans", sans-serif; font-size: 72px; line-height: 2.2; }
 .chn { font-size: 46px; font-weight: bold; line-height: 1.3; }
 .en { font-size: 30px; line-height: 1.35; color: #bbb; }
 .blank { display: inline-block; width: 3.5em; border-bottom: 0.08em solid currentColor; }
