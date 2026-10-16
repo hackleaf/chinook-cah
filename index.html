@@ -283,22 +283,23 @@ body {
 /* One row per distinct Chinook word: word, spelling, state, verify */
 .words {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(2.5em, max-content) 34px;
-  gap: 6px 10px;
+  grid-template-columns: minmax(7em, 12em) minmax(4em, 1fr) 34px;
+  gap: 6px 14px;
   align-items: center;
 }
 /* The word sits on its own line above its spelling, except in the wider Fix spelling popup */
 .words .word-chn { grid-column: 1 / -1; margin-top: 4px; }
 .words .dup-error { grid-column: 1 / -1; }
 @media (min-width: 900px) {
-  .fix .words { grid-template-columns: minmax(5.5em, max-content) minmax(0, 1fr) minmax(2.5em, max-content) 34px; gap: 10px; }
+  .fix .words { grid-template-columns: minmax(5.5em, max-content) minmax(7em, 13em) minmax(4em, 1fr) 34px; gap: 10px 14px; }
   .fix .words .word-chn { grid-column: auto; margin-top: 0; }
   .fix .words .dup-error { grid-column: 2 / -1; }
 }
 .word-row { display: contents; }
-.word-dupl { font-family: var(--dupl); font-size: 1.7rem; line-height: 1.2; white-space: nowrap; color: var(--fg); justify-self: center; }
+.word-dupl { font-family: var(--dupl); font-size: 2.1rem; line-height: 1.3; white-space: nowrap; overflow-x: auto; color: var(--fg); justify-self: start; min-width: 0; max-width: 100%; padding-inline: 4px; }
 label.word-chn { font: 700 1rem/1.3 var(--body); text-transform: none; letter-spacing: 0; color: var(--fg); overflow-wrap: anywhere; }
 .word-row.is-fuzzy .dup-field:not(.has-error):not(.has-partial) { background: var(--fuzzy-bg); border-color: var(--fuzzy); }
+.verify { justify-self: end; }
 .verify {
   font: 700 1rem/1 var(--body);
   width: 34px; height: 34px;
