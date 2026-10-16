@@ -402,7 +402,7 @@ label.word-chn { font: 700 1rem/1.3 var(--body); text-transform: none; letter-sp
     <h2 id="fix-title">Fix spelling</h2>
     <button class="x-btn" id="fix-close" type="button" aria-label="Close Fix spelling">×</button>
   </div>
-  <p class="hint">These words on your cards haven’t been checked yet. Type each one’s spelling over the grey guess. Changes are saved as you go.</p>
+  <p class="hint">These words on your cards haven’t been checked yet. Type each one’s spelling over the grey guess, or press space to take it. Changes are saved as you go.</p>
   <div class="words" id="fix-words"></div>
   <div class="actions"><button class="btn btn-primary" id="fix-done" type="button">Done</button></div>
 </dialog>
@@ -471,7 +471,7 @@ label.word-chn { font: 700 1rem/1.3 var(--body); text-transform: none; letter-sp
           <details class="letters">
             <summary>Spelling help</summary>
             <div class="help">
-              <p class="hint">An orange box shows a guessed or unchecked spelling in grey. Type the spelling to confirm or correct it; clear the box to go back to the guess. A word’s spelling is shared by every card that uses it.</p>
+              <p class="hint">An orange box shows a guessed or unchecked spelling in grey. Type the spelling to confirm or correct it, or press space in an empty box to take the suggestion; clear the box to go back to it. A word’s spelling is shared by every card that uses it.</p>
               <p class="hint">A dash breaks the stroke between syllables (<code>ka-na-wi</code>). An apostrophe splits letters that would otherwise join: <code>owa</code> is ow&nbsp;+&nbsp;a, <code>o'wa</code> is o&nbsp;+&nbsp;wa. A number after a letter picks an alternate form: <code>lo2</code> turns the o the other way (<code>lo\2</code> and <code>lo/2</code> work too).</p>
               <p class="hint">Use <code>_</code> for a blank and <code>*stars*</code> for italics, in Chinook and English.</p>
               <dl id="letters"></dl>
@@ -727,7 +727,12 @@ function makeWordRow(w, opts) {
   const sync = () => { backdrop.scrollLeft = input.scrollLeft; };
   for (const type of ['scroll', 'keyup', 'click', 'select', 'focus']) input.addEventListener(type, sync);
   input.addEventListener('input', () => {
-    const value = input.value.trim() ? input.value : '';
+    // A space typed into an empty box fills in the grey suggestion (and so confirms it).
+    if (input.value && !input.value.trim() && input.placeholder) {
+      input.value = input.placeholder;
+      input.setSelectionRange(input.value.length, input.value.length);
+    }
+    const value = input.value.trim();   // spaces at the ends aren't part of the spelling
     opts.change(w, value, !value || !toDuployan(value).error);
   });
 
