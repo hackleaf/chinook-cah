@@ -854,6 +854,17 @@ function commitWords(card) {
   }
 }
 
+// Enter in a text box moves to the next box instead of submitting (which would
+// save and close the card); the card is only saved with its button.
+els.form.addEventListener('keydown', (ev) => {
+  if (ev.key !== 'Enter' || ev.isComposing || ev.target.tagName !== 'INPUT' || ev.target.type !== 'text') return;
+  ev.preventDefault();
+  const boxes = [...els.form.querySelectorAll('input[type="text"]')].filter((el) => el.offsetParent);
+  const next = boxes[boxes.indexOf(ev.target) + 1];
+  if (next) next.focus();
+  else ev.target.blur();
+});
+
 els.form.addEventListener('submit', (ev) => {
   ev.preventDefault();
   if (els.save.disabled) return;
