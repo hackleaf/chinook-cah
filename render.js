@@ -80,6 +80,9 @@ const esc = (s) =>
 // Show each "_" blank as a fill-in line.
 const withBlanks = (s) => esc(s).replace(/_+/g, '<span class="blank"></span>');
 
+// Latin text also supports *italics*.
+const latin = (s) => withBlanks(s).replace(/\*([^*]+)\*/g, '<em>$1</em>');
+
 function cardHtml(card, duployan, fontUrl) {
   return `<!doctype html><meta charset="utf-8"><style>
 @font-face { font-family: Dup; src: url("${fontUrl}"); }
@@ -98,8 +101,8 @@ html, body { margin: 0; background: transparent; }
 </style>
 <div class="card">
   <div class="dup">${withBlanks(duployan)}</div>
-  <div class="chn">${withBlanks(card.chn)}</div>
-  <div class="en">${withBlanks(card.en)}</div>
+  <div class="chn">${latin(card.chn)}</div>
+  <div class="en">${latin(card.en)}</div>
 </div>`;
 }
 
