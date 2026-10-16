@@ -163,6 +163,7 @@ body {
   .sheet-close:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
   .preview-col { width: min(100%, 170px); }
   html.sheet-open { overflow: hidden; }
+  .editor::after { content: ''; height: 50dvh; }
 }
 @media (prefers-reduced-motion: reduce) { .editor, .editor.is-open { transition: none; } }
 
@@ -188,6 +189,8 @@ body {
 }
 .fix[open] { display: grid; gap: 14px; align-content: start; }
 .fix::backdrop { background: rgb(0 0 0 / 0.45); }
+/* Room to scroll the end of a popup up to mid-screen, clear of a phone's keyboard */
+.fix::after { content: ''; height: 50dvh; }
 .fix h2 { margin: 0; font: 400 2rem/1.1 var(--display); }
 @media (max-width: 899px) {
   .fix {
