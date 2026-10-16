@@ -304,7 +304,7 @@ body {
           <input id="f-dup" name="dup" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="dup-error dup-hint">
         </div>
         <p class="dup-error" id="dup-error" aria-live="polite"></p>
-        <p class="hint" id="dup-hint">A dash breaks the stroke between syllables (<code>ka-na-wi</code>). An apostrophe splits letters that would otherwise join: <code>owa</code> is ow&nbsp;+&nbsp;a, <code>o'wa</code> is o&nbsp;+&nbsp;wa.</p>
+        <p class="hint" id="dup-hint">A dash breaks the stroke between syllables (<code>ka-na-wi</code>). An apostrophe splits letters that would otherwise join: <code>owa</code> is ow&nbsp;+&nbsp;a, <code>o'wa</code> is o&nbsp;+&nbsp;wa. A <code>2</code> after a vowel turns it the other way: <code>lo2</code>.</p>
         <details class="letters">
           <summary>Letters you can use</summary>
           <dl id="letters"></dl>
@@ -358,6 +358,16 @@ const LETTERS = {
   s: 0x1bc1c, sh: 0x1bc1b, ch: 0x1bc23, ts: 0x1bc25, th: 0x1bc11,
 };
 const KEYS = Object.keys(LETTERS).sort((a, b) => b.length - a.length);
+
+// A "2" right after a vowel selects its alternate form (turned the other way).
+const CGJ3 = '\u034F\u034F\u034F';
+const ALTERNATES = {
+  a: '\u{1BC42}', // reversed A (SLOAN OW)
+  e: '\u{1BC46}', // E turned the other way is I
+  i: '\u{1BC47}', // I turned the other way is E
+};
+// Circle vowels: three CGJs reverse the circle (a Rawnd Musmus Duployan convention).
+for (const k of ['o', 'oo', 'ow', 'wa', 'wo', 'wi']) ALTERNATES[k] = String.fromCodePoint(LETTERS[k]) + CGJ3;
 const PASSTHROUGH = /[\s_.,;:!?"()]/;
 const ZWNJ = '‌';
 
@@ -375,8 +385,15 @@ function toDuployan(dup) {
       const bad = Array.from(dup.slice(i))[0];
       return { text: out, error: { index: i, char: bad } };
     }
-    out += String.fromCodePoint(LETTERS[key]);
-    i += key.length;
+    const next = i + key.length;
+    if (src[next] === '2') {
+      if (!ALTERNATES[key]) return { text: out, error: { index: next, char: '2' } };
+      out += ALTERNATES[key];
+      i = next + 1;
+    } else {
+      out += String.fromCodePoint(LETTERS[key]);
+      i = next;
+    }
   }
   return { text: out, error: null };
 }
@@ -514,6 +531,11 @@ function refresh() {
     if (partial.length) {
       const options = partial.sort().flatMap((k, i) => [i ? (i === partial.length - 1 ? ' or ' : ', ') : '', code(k)]);
       els.dupError.replaceChildren(code('“' + error.char + '”'), ` (character ${error.index + 1}) needs another letter: `, ...options, '.');
+    } else if (error.char === '2') {
+      els.dupError.replaceChildren(
+        code('2'), ` (character ${error.index + 1}) only goes after a vowel: `,
+        ...Object.keys(ALTERNATES).flatMap((k, i, all) => [i ? (i === all.length - 1 ? ' or ' : ', ') : '', code(k)]), '.'
+      );
     } else {
       els.dupError.replaceChildren(
         'No Duployan letter for ',

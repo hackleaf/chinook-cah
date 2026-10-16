@@ -46,6 +46,16 @@ const LETTERS = {
   r: 0x1bc0b, // R
 };
 const KEYS = Object.keys(LETTERS).sort((a, b) => b.length - a.length);
+
+// A "2" right after a vowel selects its alternate form (turned the other way).
+const CGJ3 = '\u034F\u034F\u034F';
+const ALTERNATES = {
+  a: '\u{1BC42}', // reversed A (SLOAN OW)
+  e: '\u{1BC46}', // E turned the other way is I
+  i: '\u{1BC47}', // I turned the other way is E
+};
+// Circle vowels: three CGJs reverse the circle (a Rawnd Musmus Duployan convention).
+for (const k of ['o', 'oo', 'ow', 'wa', 'wo', 'wi']) ALTERNATES[k] = String.fromCodePoint(LETTERS[k]) + CGJ3;
 const PASSTHROUGH = /[\s_.,;:!?"()]/;
 
 function toDuployan(dup) {
@@ -67,8 +77,17 @@ function toDuployan(dup) {
       if (!key) {
         throw new Error(`unsupported letter "${dup[i]}" at position ${i} in "${dup}"`);
       }
-      out += String.fromCodePoint(LETTERS[key]);
-      i += key.length;
+      const next = i + key.length;
+      if (src[next] === '2') {
+        if (!ALTERNATES[key]) {
+          throw new Error(`"${key}" has no alternate form ("2" at position ${next}) in "${dup}"`);
+        }
+        out += ALTERNATES[key];
+        i = next + 1;
+      } else {
+        out += String.fromCodePoint(LETTERS[key]);
+        i = next;
+      }
     }
   }
   return out;
