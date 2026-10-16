@@ -280,10 +280,10 @@ body {
 .dup-error { margin: 0; font-size: 0.88rem; color: var(--err); }
 .dup-error:empty { display: none; }
 
-/* One row per distinct Chinook word: word, spelling, state, verify */
+/* One row per distinct Chinook word: word, spelling box, Duployan */
 .words {
   display: grid;
-  grid-template-columns: minmax(7em, 12em) minmax(4em, 1fr) 34px;
+  grid-template-columns: minmax(7em, 12em) minmax(4em, 1fr);
   gap: 6px 14px;
   align-items: center;
 }
@@ -291,26 +291,16 @@ body {
 .words .word-chn { grid-column: 1 / -1; margin-top: 4px; }
 .words .dup-error { grid-column: 1 / -1; }
 @media (min-width: 900px) {
-  .fix .words { grid-template-columns: minmax(5.5em, max-content) minmax(7em, 13em) minmax(4em, 1fr) 34px; gap: 10px 14px; }
+  .fix .words { grid-template-columns: minmax(5.5em, max-content) minmax(7em, 13em) minmax(4em, 1fr); gap: 10px 14px; }
   .fix .words .word-chn { grid-column: auto; margin-top: 0; }
   .fix .words .dup-error { grid-column: 2 / -1; }
 }
 .word-row { display: contents; }
+.dup-field input::placeholder { color: color-mix(in srgb, var(--muted) 70%, transparent); font-weight: 400; opacity: 1; }
+.word-dupl.is-fuzzy { color: var(--muted); }
 .word-dupl { font-family: var(--dupl); font-size: 2.1rem; line-height: 1.3; white-space: nowrap; overflow-x: auto; color: var(--fg); justify-self: start; min-width: 0; max-width: 100%; padding-inline: 4px; }
 label.word-chn { font: 700 1rem/1.3 var(--body); text-transform: none; letter-spacing: 0; color: var(--fg); overflow-wrap: anywhere; }
 .word-row.is-fuzzy .dup-field:not(.has-error):not(.has-partial) { background: var(--fuzzy-bg); border-color: var(--fuzzy); }
-.verify { justify-self: end; }
-.verify {
-  font: 700 1rem/1 var(--body);
-  width: 34px; height: 34px;
-  border-radius: 50%;
-  border: 1px solid var(--line);
-  background: transparent;
-  color: var(--fg);
-  cursor: pointer;
-}
-.verify:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-.verify:disabled { visibility: hidden; }
 
 .dup-error.is-partial { color: var(--warn); }
 .dup-backdrop mark.is-partial { background: var(--warn-bg); box-shadow: 0 0 0 1.5px var(--warn); }
@@ -408,7 +398,7 @@ label.word-chn { font: 700 1rem/1.3 var(--body); text-transform: none; letter-sp
     <h2 id="fix-title">Fix spelling</h2>
     <button class="x-btn" id="fix-close" type="button" aria-label="Close Fix spelling">×</button>
   </div>
-  <p class="hint">These words on your cards haven’t been checked yet. Correct a spelling, or press <strong>✓</strong> if it’s already right. Changes are saved as you go.</p>
+  <p class="hint">These words on your cards haven’t been checked yet. Type each one’s spelling over the grey guess. Changes are saved as you go.</p>
   <div class="words" id="fix-words"></div>
   <div class="actions"><button class="btn btn-primary" id="fix-done" type="button">Done</button></div>
 </dialog>
@@ -477,7 +467,7 @@ label.word-chn { font: 700 1rem/1.3 var(--body); text-transform: none; letter-sp
           <details class="letters">
             <summary>Spelling help</summary>
             <div class="help">
-              <p class="hint">Orange spellings are guesses or haven’t been checked yet. Type in one, or press <strong>✓</strong>, to confirm it. A word’s spelling is shared by every card that uses it.</p>
+              <p class="hint">An orange box shows a guessed or unchecked spelling in grey. Type the spelling to confirm or correct it; clear the box to go back to the guess. A word’s spelling is shared by every card that uses it.</p>
               <p class="hint">A dash breaks the stroke between syllables (<code>ka-na-wi</code>). An apostrophe splits letters that would otherwise join: <code>owa</code> is ow&nbsp;+&nbsp;a, <code>o'wa</code> is o&nbsp;+&nbsp;wa. A number after a letter picks an alternate form: <code>lo2</code> turns the o the other way (<code>lo\2</code> and <code>lo/2</code> work too).</p>
               <p class="hint">Use <code>_</code> for a blank and <code>*stars*</code> for italics, in Chinook and English.</p>
               <dl id="letters"></dl>
@@ -692,10 +682,13 @@ function describeError(error) {
   return { partial: false, nodes: ['No Duployan letter for ', code('“' + error.char + '”'), at + '. Respell it, or open “Letters you can use”.'] };
 }
 
-// One row per distinct word: the word, its spelling (with the first unreadable
-// character marked), fuzzy/verified state, and a button to verify as is.
-// opts.spelling(w) gives the state shown; opts.change(w, value, valid) is
-// called when the spelling is typed or accepted with ✓.
+// One row per distinct word: the word, its spelling box and the spelling drawn
+// in Duployan. A word nobody has checked shows its guess (or default) as a grey
+// placeholder; typing replaces it and marks the word checked, and clearing the
+// box goes back to the grey guess.
+//   opts.base(w)    the spelling used when nothing is typed: { dup, verified }
+//   opts.typed(w)   the text to start the box with ('' for an unchecked word)
+//   opts.change(w, value, valid)   called as the box is typed in
 function makeWordRow(w, opts) {
   const row = document.createElement('div');
   row.className = 'word-row';
@@ -705,33 +698,35 @@ function makeWordRow(w, opts) {
   const field = Object.assign(document.createElement('div'), { className: 'dup-field' });
   const backdrop = Object.assign(document.createElement('div'), { className: 'dup-backdrop' });
   backdrop.setAttribute('aria-hidden', 'true');
-  const input = Object.assign(document.createElement('input'), { id, type: 'text', autocomplete: 'off', spellcheck: false, value: opts.spelling(w).dup });
+  const input = Object.assign(document.createElement('input'), { id, type: 'text', autocomplete: 'off', spellcheck: false, value: opts.typed(w) });
   input.setAttribute('autocapitalize', 'off');
   field.append(backdrop, input);
-  // The spelling drawn in Duployan, updated as it's typed.
   const dupl = Object.assign(document.createElement('span'), { className: 'word-dupl' });
   dupl.setAttribute('aria-hidden', 'true');
-  const verify = Object.assign(document.createElement('button'), { type: 'button', className: 'verify', textContent: '✓' });
-  verify.setAttribute('aria-label', `Mark the spelling of ${w} as verified`);
   const err = Object.assign(document.createElement('p'), { className: 'dup-error' });
   err.setAttribute('aria-live', 'polite');
   input.setAttribute('aria-describedby', err.id = id + '-err');
-  row.append(label, field, dupl, verify, err);
+  row.append(label, field, dupl, err);
 
   const sync = () => { backdrop.scrollLeft = input.scrollLeft; };
   for (const type of ['scroll', 'keyup', 'click', 'select', 'focus']) input.addEventListener(type, sync);
-  const isValid = () => !!input.value.trim() && !toDuployan(input.value).error;
-  input.addEventListener('input', () => opts.change(w, input.value, isValid()));
-  verify.addEventListener('click', () => opts.change(w, input.value, isValid()));
+  input.addEventListener('input', () => {
+    const value = input.value.trim() ? input.value : '';
+    opts.change(w, value, !value || !toDuployan(value).error);
+  });
+
   row.update = () => {
-    const sp = opts.spelling(w);
+    const base = opts.base(w);
     const value = input.value;
-    const { text, error } = toDuployan(value);
-    const empty = !value.trim();
+    const typed = !!value.trim();
+    const checked = typed || base.verified;
+    input.placeholder = base.dup;
+    const { text, error } = toDuployan(typed ? value : base.dup);
     dupl.textContent = text;
+    dupl.classList.toggle('is-fuzzy', !checked);
     backdrop.replaceChildren();
     let partial = false;
-    if (error) {
+    if (typed && error) {
       const d = describeError(error);
       partial = d.partial;
       const end = error.index + error.char.length;
@@ -741,25 +736,30 @@ function makeWordRow(w, opts) {
       backdrop.append(value.slice(0, error.index), mark, value.slice(end));
       err.replaceChildren(...d.nodes);
     } else {
-      backdrop.textContent = value;
-      err.textContent = empty ? 'Needs a spelling.' : '';
+      backdrop.textContent = typed ? value : '';
+      err.textContent = '';
     }
+    const bad = typed && !!error;
     err.classList.toggle('is-partial', partial);
-    field.classList.toggle('has-error', (!!error && !partial) || empty);
+    field.classList.toggle('has-error', bad && !partial);
     field.classList.toggle('has-partial', partial);
-    input.setAttribute('aria-invalid', error || empty ? 'true' : 'false');
-    row.classList.toggle('is-fuzzy', !sp.verified);
-    verify.disabled = sp.verified;
+    input.setAttribute('aria-invalid', bad ? 'true' : 'false');
+    row.classList.toggle('is-fuzzy', !checked);
     sync();
-    return !error && !empty;
+    return !bad;
   };
   return row;
 }
 
+// Saved spelling, or a guess: what a word uses when nothing is typed for it.
+const baseSpelling = (w) => words[w] || { dup: guess(w), verified: false };
+
 const editorRowOpts = {
-  spelling: draftSpelling,
+  base: baseSpelling,
+  typed: (w) => (pending.has(w) ? pending.get(w).dup : (words[w] && words[w].verified ? words[w].dup : '')),
   change: (w, value) => {
-    pending.set(w, { dup: value, verified: true });
+    if (value) pending.set(w, { dup: value, verified: true });
+    else pending.delete(w);   // cleared: back to the saved spelling or guess
     disarmDelete();
     refresh();
   },
@@ -913,13 +913,22 @@ function fuzzyWords() {
   return [...used].filter((w) => !(words[w] && words[w].verified)).sort();
 }
 
+// What each listed word was when the popup opened, so clearing a box restores it.
+let fixOriginal = new Map();
+
 const fixRowOpts = {
   idPrefix: 'fx-',
-  spelling: (w) => words[w] || { dup: guess(w), verified: false },
+  base: (w) => fixOriginal.get(w) || { dup: guess(w), verified: false },
+  typed: () => '',
   change: (w, value, valid) => {
-    // Only a spelling that converts is saved; until then the row shows the problem.
-    if (valid) {
+    // A typed spelling is saved once it converts; clearing the box restores the original.
+    if (!value) {
+      if (fixOriginal.get(w)) words[w] = fixOriginal.get(w);
+      else delete words[w];
+    } else if (valid) {
       words[w] = { dup: value, verified: true };
+    }
+    if (!value || valid) {
       persist();
       renderDeck();
       els.words.replaceChildren();   // rebuild the editor's rows from the saved spellings
@@ -932,7 +941,9 @@ const fixRowOpts = {
 
 els.fixBtn.addEventListener('click', () => {
   // The list is fixed while the popup is open, so rows don't jump as words get verified.
-  const rows = fuzzyWords().map((w) => makeWordRow(w, fixRowOpts));
+  const list = fuzzyWords();
+  fixOriginal = new Map(list.map((w) => [w, words[w]]));
+  const rows = list.map((w) => makeWordRow(w, fixRowOpts));
   els.fixWords.replaceChildren(...rows);
   rows.forEach((r) => r.update());
   els.fix.showModal();
