@@ -140,7 +140,9 @@
     let w = word.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/['’]/g, '');
     // Letters with no Duployan spelling of their own become the nearest one.
     w = w.replace(/qu/g, 'kw').replace(/j/g, 'ch').replace(/q/g, 'k').replace(/z/g, 's').replace(/c(?!h)/g, 'k')
-      .replace(/([bdfghklmnprstvx])\1/g, '$1');
+      .replace(/([bdfghklmnprstvx])\1/g, '$1')
+      .replace(/(?<=[a-z])iyu/g, 'yu')   // hiyu: the i merges into yu
+      .replace(/ou(?![aeiou])/g, 'u');   // French-style ou is oo (tamahnous)
     const units = [];
     const isVowel = (ch) => !!ch && 'aeiouy'.includes(ch);
     for (let i = 0; i < w.length;) {
@@ -150,9 +152,11 @@
       if ((m = rest.match(/^(oo|u)/))) { units.push({ t: 'oo', kind: 'V' }); i += m[1].length; continue; }
       if ((m = rest.match(/^au(?![aeiou])/))) { units.push({ t: 'aw', kind: 'V' }); i += 2; continue; }
       if (rest.startsWith('ee')) { units.push({ t: 'i', kind: 'V' }); i += 2; continue; }
+      if (rest.startsWith('yu')) { units.push({ t: 'yu', kind: 'V' }); i += 2; continue; }
       if ((m = rest.match(/^([ao])w(?![aeiou])/))) { units.push({ t: m[1] + 'w', kind: 'V' }); i += 2; continue; }
       const ch = w[i];
-      if ('aeio'.includes(ch)) { units.push({ t: ch, kind: 'V' }); i++; continue; }
+      // e is read as i, as the Duployan test page does; the form rules then pick I or E.
+      if ('aeio'.includes(ch)) { units.push({ t: ch === 'e' ? 'i' : ch, kind: 'V' }); i++; continue; }
       if (ch === 'w') {
         const v = w[i + 1];
         if (v && 'aoie'.includes(v)) { units.push({ t: 'w' + (v === 'e' ? 'i' : v), kind: 'W' }); i += 2; }
@@ -181,6 +185,11 @@
       const between = units.slice(prev + 1, cur);
       if (units[cur].kind === 'W') { cuts.push(prev + 1 + between.length); continue; }  // wa/wo/wi start a syllable
       if (between.length === 0) continue;                                         // vowel pair: one syllable (nai)
+      // A word-initial i keeps a following l, s, sh, ch or ts (il-i-hi, is-kum).
+      if (prev === 0 && units[0].t === 'i' && ['l', 's', 'sh', 'ch', 'ts'].includes(between[0].t)) {
+        if (between.length > 1) cuts.push(prev + 2);
+        continue;
+      }
       if (between.length === 1) { cuts.push(prev + 1); continue; }                // V-CV
       const lastTwo = between.slice(-2).map((u) => u.t).join('');
       cuts.push(cur - (ONSETS.test(lastTwo) ? 2 : 1));                            // VC-CV, or V-CCV for kl/sk
@@ -192,24 +201,191 @@
     return out;
   }
 
-  // Join a syllable's units, adding an apostrophe only where letters would merge.
+  // Join a syllable's units, adding an apostrophe only where letters would
+  // merge. A unit's form number (u.form, e.g. "2") follows its letter; like an
+  // apostrophe, a number ends a run of letters, so no apostrophe is needed after it.
   function spellSyllable(units) {
     let s = '';
-    const want = [];
+    let run = '';    // letters since the last apostrophe or number
+    let want = [];   // the letters that run should read as
     for (const u of units) {
       const t = u.kind === 'Y' ? 'i' : u.t;
+      const got = tokens(run + t);
+      if (run && !(got && got.join('|') === [...want, t].join('|'))) {
+        s += "'";
+        run = '';
+        want = [];
+      }
+      s += t;
+      run += t;
       want.push(t);
-      const joined = s + t;
-      const got = tokens(joined);
-      s = got && got.join('|') === want.join('|') ? joined : s + "'" + t;
+      if (u.form) {
+        s += u.form;
+        run = '';
+        want = [];
+      }
     }
     return s;
+  }
+
+  // Ask the rules above which vowels take another form, and record it on the units.
+  function chooseForms(sylls) {
+    const flat = sylls.flat();
+    const keyOf = (u) => (u.kind === 'Y' ? 'i' : u.t);
+    const word = sylls.map((syl) => syl.map((u) => LETTERS[keyOf(u)]).join('')).join(ZWNJ);
+    let marked;
+    try {
+      marked = markAlternates(word);
+    } catch {
+      return;
+    }
+    const letters = [];
+    for (const ch of marked) {
+      if (ch === 'R') { if (letters.length) letters[letters.length - 1].alt = true; continue; }
+      if (ch === ZWNJ) continue;
+      letters.push({ ch });
+    }
+    if (letters.length !== flat.length) return;   // the rules changed the letters; keep the guess as is
+    letters.forEach((l, n) => {
+      const u = flat[n];
+      if (l.ch === '\u{1BC4A}' || l.ch === '\u{1BC4B}') {   // non-orienting i: consonantal i (i8), or i9
+        u.t = 'i';
+        u.kind = 'V';
+        u.form = l.ch === '\u{1BC4A}' ? '8' : '9';
+      } else if (l.alt && LETTERS[keyOf(u) + '2']) {
+        u.form = '2';
+      }
+    });
+  }
+
+  // ----- Choosing alternate forms -----
+  // The rules below are copied from transliterate.js in the Duployan test page,
+  // https://dscorbett.github.io/duployan-test/ (lines 270-303 and 316-388):
+  //   Copyright 2021 Google LLC
+  //   Copyright 2023-2026 David Corbett
+  //   Licensed under the Apache License, Version 2.0
+  //   (http://www.apache.org/licenses/LICENSE-2.0).
+  // They take one word in Duployan letters (with ZWNJ between syllables) and
+  // mark with "R" each vowel that should take its other orientation; they also
+  // swap in the non-orienting i forms U+1BC4A (consonantal i) and U+1BC4B.
+  function markAlternates(word) {
+    const hConsonant = '[\u{1BC00}\u{1BC01}]'
+    const pConsonant = '[\u{1BC02}\u{1BC07}]';
+    const tConsonant = '[\u{1BC03}\u{1BC08}\u{1BC11}]';
+    const fConsonant = '[\u{1BC04}\u{1BC09}]';
+    const kConsonant = '[\u{1BC05}\u{1BC0A}\u{1BC14}]';
+    const lConsonant = '[\u{1BC06}\u{1BC0B}\u{1BC16}-\u{1BC18}]';
+    const mConsonant = '\u{1BC19}';
+    const nConsonant = '[\u{1BC1A}\u{1BC22}]';
+    const jConsonant = '[\u{1BC1B}\u{1BC23}]';
+    const sConsonant = '[\u{1BC1C}\u{1BC25}]';
+    const curveConsonant = `(?:${mConsonant}|${nConsonant}|${jConsonant}|${sConsonant})`;
+    const marks = '[PR\\p{M}]*';
+    const normalCircleVowel = '[\u{1BC41}\u{1BC44}\u{1BC5A}\u{1BC5B}]';
+    const reversibleCircleVowel = `(?:${normalCircleVowel}|[\u{1BC5C}-\u{1BC60}])`;
+    const circleVowel = `(?:(?:\u{1BC42}|${normalCircleVowel})${marks})`;
+    const iVowelNoMarks = '[\u{1BC46}\u{1BC47}]';
+    const iVowel = `(?:${iVowelNoMarks}${marks})`;
+    const uVowel = `(?:[\u{1BC51}-\u{1BC53}\u{1BC61}-\u{1BC64}]${marks})`;
+    const curveVowel = `(?:(?:${iVowel}|${uVowel}|\u{1BC4B})${marks})`;
+    const waVowel = `(?:[\u{1BC5C}\u{1BC5D}\u{1BC60}]${marks})`;
+    const wiVowel = `(?:[\u{1BC5E}\u{1BC5F}]${marks})`;
+    const wVowel = `(?:[\u{1BC5C}-\u{1BC60}]${marks})`;
+    const vowel = `(?:${circleVowel}|${curveVowel}|${wVowel})`;
+    const noLaitin = `(?<![\u{1BC06}\u{1BC16}\u{1BC17}]\\p{M}*[\u{1BC41}\u{1BC42}]R?\\p{M}*${iVowel}(?=${tConsonant}\\p{M}*${iVowel}${nConsonant}\\p{M}*(?!${vowel})))`;
+    const noLip = `(?<![\u{1BC06}\u{1BC16}\u{1BC17}]\\p{M}*${iVowel}(?=[\u{1BC02}\u{1BC04}]))`;
+    const consonantalI = `(?:(?<=^|[^\\p{L}\\p{M}]${marks})${iVowel}(?=${circleVowel}(?!${tConsonant}|${lConsonant}|${nConsonant}|${jConsonant}))|\u{1BC4A})`;
+    const lineObstruent = `(?:${pConsonant}|${tConsonant}|${fConsonant}|${kConsonant})`;
+    const consonant = `(?:(?:${lineObstruent}|${lConsonant}|${curveConsonant}|${consonantalI})\\p{M}*)`;
+    const consonantOrH = `(?:${consonant}|${hConsonant}\\p{M}*)`;
+    const noSmallInitialVowel = `(?<!(?:^|[^\\p{L}\\p{M}]${marks})(?:[\u{1BC61}-\u{1BC64}]${marks}|${iVowel})(?=${lConsonant}|${jConsonant}|${sConsonant}))`;
+    const noConsonantLiquidOnset = `(?!(?:${pConsonant}|\u{1BC03}|${fConsonant}|${kConsonant})\\p{M}*[\u{1BC06}\u{1BC0B}])`;
+    const onset = `(?:${consonantOrH}|\u{1BC1C}\\p{M}*(?:${lConsonant}|${mConsonant}|${nConsonant})\\p{M}*|(?:\u{1BC1C}\\p{M}*)?${lineObstruent}\\p{M}*(?:${lConsonant}\\p{M}*)?)`;
+    const start = `(?<=^|[^\\p{L}\\p{M}]${marks}|${hConsonant})`;
+    const end = `(?=\\p{M}*(${hConsonant}|[^\\p{L}\\p{M}]|$))`;
+    return (word
+        .replaceAll(/^\u200C+/g, '')
+        .replaceAll(RegExp(`(?=${consonantalI})${iVowelNoMarks}(?=\\p{M}*R)`, 'gu'), '\u{1BC4B}')
+        .replaceAll(RegExp(`(?=${consonantalI})${iVowelNoMarks}`, 'gu'), '\u{1BC4A}')
+        .replaceAll(RegExp(`(?<=${nConsonant}${circleVowel})${iVowelNoMarks}(?=[R\\p{M}]*(${hConsonant}|[^\\p{L}\\p{M}]|$))`, 'gu'), '\u{1BC4B}')
+        .replaceAll(RegExp(`(?<=${nConsonant}${circleVowel})${iVowelNoMarks}(?!\\p{M}*P)`, 'gu'), '$&R')
+        .replaceAll(RegExp(`((?<=\\p{L}${marks})|(?=.[PR]*\\p{L}))\u{1BC64}`, 'gu'), '\u{1BC64}\u0301')
+        .replaceAll(RegExp(`((?<=\\p{L}${marks})|(?=.[PR]*\\p{L}))\u{1BC63}`, 'gu'), '\u{1BC64}\u0300')
+        .replaceAll(RegExp(`((?<!\\p{L}${marks})(?=.[PR]*\\p{L}))\u{1BC62}`, 'gu'), '\u{1BC64}\u0317')
+        .replaceAll(RegExp(`((?<!\\p{L}${marks})(?=.[PR]*\\p{L}))\u{1BC61}`, 'gu'), '\u{1BC64}\u0316')
+        .replaceAll(RegExp(`((?<=\\p{L}${marks})|(?=.[PR]*\\p{L}))\u{1BC62}`, 'gu'), '\u{1BC62}\u0317')
+        .replaceAll(RegExp(`((?<=\\p{L}${marks})|(?=.[PR]*\\p{L}))\u{1BC61}`, 'gu'), '\u{1BC62}\u0316')
+        .replaceAll(RegExp(`(?<=\\p{L}${marks})\u{1BC62}(?![\u0316\u0317])`, 'gu'), '\u{1BC62}\u0317')
+        .replaceAll(RegExp(`\u{1BC64}(?=[\u0300\u0301\u0316\u0317](${tConsonant}|${lConsonant}|${curveConsonant}))`, 'gu'), '\u{1BC62}')
+        .replaceAll(RegExp(`(?<=${lConsonant}|${curveConsonant})\u{1BC64}(?=[\u0300\u0301])`, 'gu'), '\u{1BC62}')
+        .replaceAll(RegExp(`(?<=${kConsonant})\u{1BC62}(?=[\u0316\u0317])`, 'gu'), '\u{1BC64}')
+        .replaceAll(RegExp(`(?<=${vowel}${marks})\u{1BC64}(?=[\u0300\u0301\u0316\u0317])`, 'gu'), '\u{1BC62}')
+        .replaceAll(RegExp(`${start}${reversibleCircleVowel}(?=\u{1BC46}${marks}(?!${hConsonant}|\\P{L}|$))`, 'gu'), '$&R')
+        .replaceAll(RegExp(`(?<=${start}${iVowel})${circleVowel}(?=${tConsonant}|${lConsonant})`, 'gu'), '$&R')
+        .replaceAll(RegExp(`(?<=${start}${normalCircleVowel}${marks})\u{1BC46}(?=\\p{M}*(${hConsonant}|[^\\p{L}\\p{M}]|$))`, 'gu'), '$&R')
+        .replaceAll(RegExp(`(?<=${pConsonant})${reversibleCircleVowel}(?=\u{1BC46}|[\u{1BC51}\u{1BC53}](?!\\p{M}*R))`, 'gu'), '$&R')
+        .replaceAll(RegExp(`(?<=${tConsonant})${reversibleCircleVowel}(?=\u{1BC46}${jConsonant})`, 'gu'), '$&R')
+        .replaceAll(RegExp(`(?<=${fConsonant})${reversibleCircleVowel}(?=\u{1BC46}(${kConsonant}|${jConsonant}))`, 'gu'), '$&R')
+        .replaceAll(RegExp(`(?<=${kConsonant})${reversibleCircleVowel}(?=(\u{1BC46}|[\u{1BC51}\u{1BC53}](?!\\p{M}*R))(?!${pConsonant}))`, 'gu'), '$&R')
+        .replaceAll(RegExp(`(?<=${lConsonant})${reversibleCircleVowel}(?=\u{1BC46}${tConsonant})`, 'gu'), '$&R')
+        .replaceAll(RegExp(`(?<!${consonant}|${vowel})${normalCircleVowel}(?=${pConsonant}|${fConsonant}|${kConsonant})`, 'gu'), '$&R')
+        .replaceAll(RegExp(`(?<!${consonant}${vowel}*)\u{1BC46}(?=\\p{M}*${iVowel}*(${tConsonant}|${lConsonant}|${curveConsonant}))`, 'gu'), '$&R')
+        .replaceAll(RegExp(`(?<!${consonant}|${vowel})[\u{1BC51}\u{1BC53}](?=${tConsonant})`, 'gu'), '$&R')
+        .replaceAll(RegExp(`(?<!${consonant}|${vowel})[\u{1BC51}\u{1BC53}](?=${lConsonant})`, 'gu'), '$&R')
+        .replaceAll(RegExp(`(?<!${consonant}|${vowel})[\u{1BC51}\u{1BC53}](?=${curveConsonant})`, 'gu'), '$&R')
+        .replaceAll(RegExp(`(?<=${pConsonant})(?!${wVowel})${reversibleCircleVowel}(?=${pConsonant}|${sConsonant})`, 'gu'), '$&R')
+        .replaceAll(RegExp(`(?<=${tConsonant})${reversibleCircleVowel}(?=\\p{M}*(${hConsonant}|[^\\p{L}\\p{M}]|$))`, 'gu'), '$&R')
+        .replaceAll(RegExp(`(?<=${tConsonant})\u{1BC46}(?!\\p{M}*(P|${iVowel}*${jConsonant}))`, 'gu'), '$&R')
+        .replaceAll(RegExp(`(?<=${tConsonant})[\u{1BC51}\u{1BC53}](?!\\p{M}*(P|${lConsonant}))`, 'gu'), '$&R')
+        .replaceAll(RegExp(`(?<=${fConsonant})\u{1BC46}(?=\\p{M}*${mConsonant})`, 'gu'), '$&R')
+        .replaceAll(RegExp(`(?<=(?<!${lConsonant})${kConsonant})(?!\u{1BC5B})${normalCircleVowel}(?=${kConsonant})`, 'gu'), '$&R')
+        .replaceAll(RegExp(`(?<=${lConsonant})${reversibleCircleVowel}(?=\\p{M}*(${hConsonant}|[^\\p{L}\\p{M}]|$))`, 'gu'), '$&R')
+        .replaceAll(RegExp(`(?<=${kConsonant}${lConsonant})${reversibleCircleVowel}(?!${marks}([PR]|${pConsonant}|${tConsonant}|${fConsonant}|${kConsonant}|${curveConsonant}|${vowel}))`, 'gu'), '$&R')
+        .replaceAll(RegExp(`(?<=${lConsonant})\u{1BC5B}(?!\\p{M}*P)(?=\\p{M}*${jConsonant})`, 'gu'), '$&R')
+        .replaceAll(RegExp(`${start}\u{1BC5E}${marks}(?=${lConsonant}|${jConsonant})`, 'gu'), '$&R')
+        .replaceAll(RegExp(`(?<=${pConsonant})${waVowel}(?=${tConsonant}|${lConsonant}|${jConsonant})`, 'gu'), '$&R')
+        .replaceAll(RegExp(`(?<=${tConsonant})${waVowel}(?=${pConsonant}|${kConsonant}|${mConsonant})`, 'gu'), '$&R')
+        .replaceAll(RegExp(`(?<=${fConsonant})${waVowel}(?=${lConsonant}|${jConsonant}|${mConsonant})`, 'gu'), '$&R')
+        .replaceAll(RegExp(`(?<=${kConsonant})${waVowel}(?=${tConsonant}|${lConsonant}|${jConsonant}|${nConsonant})`, 'gu'), '$&R')
+        .replaceAll(RegExp(`(?<=${lConsonant})${waVowel}(?=${pConsonant}|${fConsonant}|${kConsonant}|${mConsonant}|${sConsonant})`, 'gu'), '$&R')
+        .replaceAll(RegExp(`(?<=${mConsonant})${waVowel}(?=${pConsonant}|${tConsonant}|${kConsonant}|${mConsonant})`, 'gu'), '$&R')
+        .replaceAll(RegExp(`(?<=${nConsonant})${waVowel}(?=${tConsonant}|${lConsonant}|${jConsonant})`, 'gu'), '$&R')
+        .replaceAll(RegExp(`(?<=${jConsonant})${waVowel}(?=${tConsonant}|${lConsonant}|${jConsonant})`, 'gu'), '$&R')
+        .replaceAll(RegExp(`(?<=${sConsonant})${waVowel}(?=${pConsonant}|${tConsonant}|${fConsonant}|${kConsonant}|${mConsonant}|${nConsonant}|${sConsonant})`, 'gu'), '$&R')
+        .replaceAll(RegExp(`(?<=${pConsonant})${wiVowel}(?=${mConsonant})`, 'gu'), '$&R')
+        .replaceAll(RegExp(`(?<=${tConsonant})${wiVowel}(?=${pConsonant}|${fConsonant}|${kConsonant}|${mConsonant}|${nConsonant}|${sConsonant})`, 'gu'), '$&R')
+        .replaceAll(RegExp(`(?<=${fConsonant})${wiVowel}(?=${mConsonant})`, 'gu'), '$&R')
+        .replaceAll(RegExp(`(?<=${lConsonant})${wiVowel}(?=${pConsonant}|${tConsonant}|${fConsonant}|${kConsonant}|${mConsonant}|${nConsonant}|${sConsonant})`, 'gu'), '$&R')
+        .replaceAll(RegExp(`(?<=${mConsonant})${wiVowel}(?=${pConsonant}|${tConsonant}|${kConsonant}|${mConsonant})`, 'gu'), '$&R')
+        .replaceAll(RegExp(`(?<=${nConsonant})${wiVowel}(?=${tConsonant}|${lConsonant}|${nConsonant}|${jConsonant})`, 'gu'), '$&R')
+        .replaceAll(RegExp(`(?<=${jConsonant})${wiVowel}(?=${tConsonant}|${lConsonant}|${nConsonant}|${jConsonant})`, 'gu'), '$&R')
+        .replaceAll(RegExp(`(?<=${sConsonant})${wiVowel}(?=${pConsonant}|${tConsonant}|${fConsonant}|${nConsonant}|${sConsonant})`, 'gu'), '$&R')
+        .replaceAll(RegExp(`(?<=${lConsonant})\u{1BC46}(?!\\p{M}*P)`, 'gu'), '$&R')
+        .replaceAll(RegExp(`(?<=${lConsonant}${circleVowel}?)[\u{1BC51}\u{1BC53}](?!\\p{M}*P)`, 'gu'), '$&R')
+        .replaceAll(RegExp(`(?<=${curveConsonant})\u{1BC46}(?!\\p{M}*P)`, 'gu'), '$&R')
+        .replaceAll(RegExp(`(?<=${curveConsonant}${circleVowel}?)[\u{1BC51}\u{1BC53}](?!\\p{M}*P)`, 'gu'), '$&R')
+        .replaceAll(RegExp(`(?<!\\p{L})\u{1BC46}(?=\u200C?(${hConsonant}|${iVowel}))`, 'gu'), '$&R')
+        .replaceAll(RegExp(`(?<=${hConsonant})\u{1BC46}(?=\\p{M}*(${hConsonant}|[^\\p{L}\\p{M}]|$))`, 'gu'), '$&R')
+        .replaceAll(RegExp(`(?<=${consonant}${vowel}*${iVowel})\u{1BC46}(?!\\p{M}*P)`, 'gu'), '$&R')
+        .replaceAll(RegExp(`(?<=${iVowel})\u{1BC46}(?!\\p{M}*(P|${vowel}*${consonant}))`, 'gu'), '$&R')
+        .replaceAll(RegExp(`(?<!${consonant}${vowel}*)\u{1BC46}(?=\\p{M}*${iVowel}${vowel}*${consonant})`, 'gu'), '$&R')
+        .replaceAll(RegExp(`(?<=(${pConsonant}|${jConsonant})${iVowel})${normalCircleVowel}(?=${jConsonant})`, 'gu'), '$&R')
+        .replaceAll(RegExp(`(?<=(${tConsonant}|${mConsonant})\u{1BC47})${normalCircleVowel}(?=${mConsonant})`, 'gu'), '$&R')
+        .replaceAll(RegExp(`(?<=${nConsonant}\u{1BC47})${normalCircleVowel}(?=${nConsonant})`, 'gu'), '$&R')
+        .replaceAll(RegExp(`(?<=${sConsonant}\u{1BC47})${normalCircleVowel}(?=${sConsonant})`, 'gu'), '$&R')
+        .replaceAll(RegExp(`(?<=${iVowel})${normalCircleVowel}(?=\\p{M}*(${hConsonant}|[^\\p{L}\\p{M}]|$))`, 'gu'), '$&R')
+        .replaceAll(RegExp(`(?<=[\u{1BC5E}\u{1BC5F}]\\p{M}*)${reversibleCircleVowel}(?!\\p{M}*P)`, 'gu'), '$&R')
+        .replace(/(?<=[PR]\p{M}*)[PR]/gu, '')
+        .replaceAll('P', '')
+    );
   }
 
   function guess(word) {
     const units = unitsOf(word);
     if (!units.length) return '';
-    return syllables(units).map(spellSyllable).join('-');
+    const sylls = syllables(units);
+    chooseForms(sylls);
+    return sylls.map(spellSyllable).join('-');
   }
 
   return { LETTERS, KEYS, formsOf, toDuployan, tokens, wordsOf, wordKey, cardDup, guess };
