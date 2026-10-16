@@ -664,7 +664,7 @@ function setForm(card) {
   // A saved card that doesn't follow the blank rule had its checkbox set by hand.
   promptTouched = !!card.prompt !== hasBlank(card);
   els.words.replaceChildren();
-  refresh();
+  refresh({ resort: true });
 }
 
 const code = (t) => Object.assign(document.createElement('code'), { textContent: t });
@@ -768,11 +768,21 @@ const editorRowOpts = {
   },
 };
 
-function refresh() {
+// Word rows list unchecked words first. They're re-sorted only when a card is
+// opened or its Chinook text changes, so a row doesn't jump while it's typed in.
+function refresh({ resort = false } = {}) {
   const card = formCard();
 
   // Keep one row per distinct word, in order, reusing rows so typing isn't lost.
-  const keys = wordsOf(card.chn);
+  let keys = wordsOf(card.chn);
+  if (resort) {
+    const checked = (w) => pending.has(w) || !!(words[w] && words[w].verified);
+    keys = [...keys.filter((w) => !checked(w)), ...keys.filter(checked)];
+  } else {
+    const shown = [...els.words.children].map((r) => r.dataset.word);
+    const at = (w) => (shown.includes(w) ? shown.indexOf(w) : Infinity);
+    keys = keys.map((w, n) => [w, n]).sort((a, b) => at(a[0]) - at(b[0]) || a[1] - b[1]).map(([w]) => w);
+  }
   const existing = new Map([...els.words.children].map((r) => [r.dataset.word, r]));
   const rows = keys.map((w) => existing.get(w) || makeWordRow(w, editorRowOpts));
   // Only touch the DOM when the list of words changed: moving a row, even back
@@ -899,7 +909,7 @@ for (const el of [els.chn, els.en]) {
   el.addEventListener('input', () => {
     if (!promptTouched) els.klale.checked = hasBlank(formCard());
     disarmDelete();
-    refresh();
+    refresh({ resort: el === els.chn });
   });
 }
 els.klale.addEventListener('input', () => { promptTouched = true; disarmDelete(); refresh(); });
