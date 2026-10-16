@@ -33,6 +33,8 @@
   --err-bg: #ffd3d3;
   --warn: #8a6a00;
   --warn-bg: #fff2a8;
+  --fuzzy: #b4570b;
+  --fuzzy-bg: #ffe3c4;
   --focus: #0e6468;
   --card-black: #121212;
   --card-white: #fdfdfb;
@@ -49,7 +51,7 @@
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #111716; --surface: #182120; --line: #2c3a37; --fg: #e4ecea; --muted: #97a7a2;
-    --accent: #4fb6b4; --accent-fg: #06201f; --err: #ff6b6b; --err-bg: #5a1d22; --warn: #e3c35a; --warn-bg: #4d4214; --focus: #4fb6b4;
+    --accent: #4fb6b4; --accent-fg: #06201f; --err: #ff6b6b; --err-bg: #5a1d22; --warn: #e3c35a; --warn-bg: #4d4214; --fuzzy: #ffa95e; --fuzzy-bg: #4a2a0e; --focus: #4fb6b4;
     --card-edge: #3a4744;
     color-scheme: dark;
   }
@@ -116,7 +118,7 @@ body {
 .form { display: grid; gap: 18px; min-width: 0; }
 
 .field { display: grid; gap: 6px; min-width: 0; }
-.field label {
+.field label, .field-title {
   font: 700 0.78rem/1.2 var(--body);
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -148,7 +150,7 @@ body {
 .dup-field:focus-within { outline: 2px solid var(--focus); outline-offset: 1px; }
 .dup-field.has-error { border-color: var(--err); }
 .dup-field.has-partial { border-color: var(--warn); }
-.dup-backdrop, #f-dup {
+.dup-backdrop, .dup-field input {
   font: 500 1.05rem/1.4 var(--mono);
   letter-spacing: 0;
   padding: 10px 12px;
@@ -169,14 +171,55 @@ body {
   border-radius: 3px;
   box-shadow: 0 0 0 1.5px var(--err);
 }
-#f-dup {
+.dup-field input {
   position: relative;
   width: 100%;
   background: transparent;
   color: var(--fg);
   outline: none;
 }
-.dup-error { margin: 0; font-size: 0.88rem; color: var(--err); min-height: 1.3em; }
+.dup-error { margin: 0; font-size: 0.88rem; color: var(--err); }
+.dup-error:empty { display: none; }
+
+/* One row per distinct Chinook word: word, spelling, state, verify */
+.words {
+  display: grid;
+  grid-template-columns: minmax(5.5em, max-content) minmax(0, 1fr) 6.2em 34px;
+  gap: 10px;
+  align-items: center;
+}
+.word-row { display: contents; }
+.word-row .pill { justify-self: start; }
+.word-row .dup-error { grid-column: 2 / -1; }
+.field label.word-chn { font: 700 1rem/1.3 var(--body); text-transform: none; letter-spacing: 0; color: var(--fg); overflow-wrap: anywhere; }
+.word-row.is-fuzzy .dup-field:not(.has-error):not(.has-partial) { background: var(--fuzzy-bg); border-color: var(--fuzzy); }
+.pill {
+  display: inline-block;
+  font: 700 0.72rem/1 var(--body);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+}
+.pill.is-fuzzy { color: var(--fuzzy); background: var(--fuzzy-bg); }
+.pill.is-verified { color: var(--accent); }
+.verify {
+  font: 700 1rem/1 var(--body);
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--fg);
+  cursor: pointer;
+}
+.verify:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.verify:disabled { visibility: hidden; }
+@media (max-width: 520px) {
+  .words { grid-template-columns: minmax(0, 1fr) 6.2em 34px; }
+  .word-chn { grid-column: 1 / -1; }
+  .word-row .dup-error { grid-column: 1 / -1; }
+}
 .dup-error.is-partial { color: var(--warn); }
 .dup-backdrop mark.is-partial { background: var(--warn-bg); box-shadow: 0 0 0 1.5px var(--warn); }
 .dup-error code { font: 500 0.95em var(--mono); }
@@ -299,20 +342,6 @@ body {
       <h2 id="editor-title">New card</h2>
 
       <div class="field">
-        <label for="f-dup">Duployan spelling <code>dup</code></label>
-        <div class="dup-field" id="dup-field">
-          <div class="dup-backdrop" id="dup-backdrop" aria-hidden="true"></div>
-          <input id="f-dup" name="dup" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="dup-error dup-hint">
-        </div>
-        <p class="dup-error" id="dup-error" aria-live="polite"></p>
-        <p class="hint" id="dup-hint">A dash breaks the stroke between syllables (<code>ka-na-wi</code>). An apostrophe splits letters that would otherwise join: <code>owa</code> is ow&nbsp;+&nbsp;a, <code>o'wa</code> is o&nbsp;+&nbsp;wa. A number after a letter picks an alternate form: <code>lo2</code> turns the o the other way (<code>lo\2</code> and <code>lo/2</code> work too).</p>
-        <details class="letters">
-          <summary>Letters you can use</summary>
-          <dl id="letters"></dl>
-        </details>
-      </div>
-
-      <div class="field">
         <label for="f-chn">Chinook <code>chn</code></label>
         <input class="text-input" id="f-chn" name="chn" type="text" autocomplete="off" spellcheck="false">
       </div>
@@ -327,6 +356,18 @@ body {
         <input id="f-klale" name="klale" type="checkbox">
         <span>klale <small>black card</small></span>
       </label>
+
+      <div class="field">
+        <span class="field-title" id="words-title">Duployan, word by word</span>
+        <div class="words" id="words" role="group" aria-labelledby="words-title"></div>
+        <p class="hint" id="words-empty">Type the Chinook above and each of its words gets a Duployan spelling here.</p>
+        <p class="hint"><span class="pill is-fuzzy">fuzzy</span> spellings are guesses or haven’t been checked. Type in one, or press <strong>✓</strong>, to mark it <span class="pill is-verified">verified</span>. A word’s spelling is shared by every card that uses it.</p>
+        <p class="hint" id="dup-hint">A dash breaks the stroke between syllables (<code>ka-na-wi</code>). An apostrophe splits letters that would otherwise join: <code>owa</code> is ow&nbsp;+&nbsp;a, <code>o'wa</code> is o&nbsp;+&nbsp;wa. A number after a letter picks an alternate form: <code>lo2</code> turns the o the other way (<code>lo\2</code> and <code>lo/2</code> work too).</p>
+        <details class="letters">
+          <summary>Letters you can use</summary>
+          <dl id="letters"></dl>
+        </details>
+      </div>
 
       <div class="actions">
         <button class="btn btn-primary" id="save" type="submit">Add card</button>
@@ -351,7 +392,7 @@ body {
 
 <script>
 // ----- Duployan converter (dup.js, shared with render.js) -----
-const { LETTERS, KEYS, formsOf, toDuployan } = Dup;
+const { LETTERS, KEYS, formsOf, toDuployan, wordsOf, cardDup, guess } = Dup;
 
 // ----- Card rendering -----
 function fillText(el, s, italics) {
@@ -373,14 +414,18 @@ function fillText(el, s, italics) {
   if (last < s.length) el.append(s.slice(last));
 }
 
-function cardFace(card) {
+// Spell a word from the saved dictionary, or guess it.
+const savedSpelling = (w) => (words[w] ? words[w].dup : guess(w));
+const cardDuployan = (card, spell = savedSpelling) => toDuployan(cardDup(card.chn || '', spell)).text;
+
+function cardFace(card, spell) {
   const frame = document.createElement('div');
   frame.className = 'card-frame';
   const c = document.createElement('div');
   c.className = 'card ' + (card.prompt ? 'is-black' : 'is-white');
   const dup = document.createElement('div');
   dup.className = 'c-dup';
-  fillText(dup, toDuployan(card.dup || '').text, false);
+  fillText(dup, cardDuployan(card, spell), false);
   const chn = document.createElement('div');
   chn.className = 'c-chn';
   fillText(chn, card.chn || '', true);
@@ -394,6 +439,7 @@ function cardFace(card) {
 
 // ----- Storage (this browser only) -----
 const STORE_KEY = 'chinook-cah.cards.v1';
+const WORDS_KEY = 'chinook-cah.words.v1';
 let storageOk = true;
 
 const newId = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
@@ -404,20 +450,41 @@ function normalize(list) {
     .filter((c) => c && typeof c === 'object')
     .map((c, i) => ({
       id: typeof c.id === 'string' && c.id ? c.id : newId(),
-      dup: String(c.dup ?? ''),
       chn: String(c.chn ?? ''),
       en: String(c.en ?? ''),
       prompt: !!(c.prompt ?? c.klale),   // klale: older saves and exports
       created: Number.isFinite(c.created) ? c.created : base + i,
+      ...(typeof c.dup === 'string' ? { dup: c.dup } : {}),   // older per-card spelling, adopted below
     }));
 }
 
-function loadStored() {
+function normalizeWords(obj) {
+  const out = {};
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return out;
+  for (const [k, v] of Object.entries(obj)) {
+    if (v && typeof v === 'object' && typeof v.dup === 'string') out[k] = { dup: v.dup, verified: !!v.verified };
+  }
+  return out;
+}
+
+// Cards from before per-word spelling carried a whole "dup" line. Where its
+// words line up one-to-one with the Chinook words, keep them as fuzzy spellings.
+function adoptLegacySpellings(list) {
+  for (const card of list) {
+    if (typeof card.dup !== 'string') continue;
+    const chnWords = [...(card.chn || '').replace(/\*([^*]+)\*/g, '$1').matchAll(/[\p{L}\p{M}]+(?:['’][\p{L}\p{M}]+)*/gu)].map((m) => Dup.wordKey(m[0]));
+    const dupWords = card.dup.split(/[\s_.,;:!?"()]+/).filter(Boolean);
+    if (chnWords.length === dupWords.length) {
+      chnWords.forEach((w, i) => { if (!words[w]) words[w] = { dup: dupWords[i], verified: false }; });
+    }
+    delete card.dup;
+  }
+}
+
+function readJson(key) {
   try {
-    const raw = localStorage.getItem(STORE_KEY);
-    if (raw === null) return null;
-    const list = JSON.parse(raw);
-    return Array.isArray(list) ? normalize(list) : null;
+    const raw = localStorage.getItem(key);
+    return raw === null ? null : JSON.parse(raw);
   } catch {
     storageOk = false;
     return null;
@@ -427,6 +494,7 @@ function loadStored() {
 function persist() {
   try {
     localStorage.setItem(STORE_KEY, JSON.stringify(cards));
+    localStorage.setItem(WORDS_KEY, JSON.stringify(words));
     storageOk = true;
   } catch {
     storageOk = false;
@@ -435,12 +503,12 @@ function persist() {
 }
 
 // ----- Editor -----
-const DEFAULTS = { dup: 'kla-how-ia, ka-na\'wi ili-hi', chn: 'klahowya, kanawi ilihi', en: 'Hello, world', prompt: false };
+const DEFAULTS = { chn: 'klahowya, kanawi ilihi', en: 'Hello, world', prompt: false };
 const $ = (id) => document.getElementById(id);
 const els = {
   editor: $('editor'), form: $('form'), title: $('editor-title'),
-  dup: $('f-dup'), chn: $('f-chn'), en: $('f-en'), klale: $('f-klale'),
-  dupField: $('dup-field'), backdrop: $('dup-backdrop'), dupError: $('dup-error'),
+  chn: $('f-chn'), en: $('f-en'), klale: $('f-klale'),
+  words: $('words'), wordsEmpty: $('words-empty'),
   save: $('save'), cancel: $('cancel'), del: $('delete'), status: $('status'),
   preview: $('preview'), deck: $('deck'), deckEmpty: $('deck-empty'), tally: $('tally'),
   imagesBtn: $('images'), exportBtn: $('export'), importBtn: $('import'), importFile: $('import-file'),
@@ -450,71 +518,126 @@ const els = {
 
 let editingId = null;   // null: new card
 let cards = [];         // newest first
+let words = {};         // Chinook word -> { dup, verified }
+let pending = new Map();   // this edit's spellings, saved with the card
+
+// The spelling the editor shows for a word: this edit's, the saved one, or a guess.
+function draftSpelling(w) {
+  return pending.get(w) || words[w] || { dup: guess(w), verified: false };
+}
+const draftSpell = (w) => draftSpelling(w).dup;
 
 function formCard() {
-  return { dup: els.dup.value, chn: els.chn.value, en: els.en.value, prompt: els.klale.checked };
+  return { chn: els.chn.value, en: els.en.value, prompt: els.klale.checked };
 }
 
 function setForm(card) {
-  els.dup.value = card.dup || '';
   els.chn.value = card.chn || '';
   els.en.value = card.en || '';
   els.klale.checked = !!card.prompt;
+  els.words.replaceChildren();
   refresh();
 }
 
-function syncBackdrop() {
-  els.backdrop.scrollLeft = els.dup.scrollLeft;
+const code = (t) => Object.assign(document.createElement('code'), { textContent: t });
+const list = (items) => items.flatMap((k, i) => [i ? (i === items.length - 1 ? ' or ' : ', ') : '', code(k)]);
+
+// Explain why a spelling doesn't convert. Returns the message and whether the
+// bad character only starts a longer letter (w → wa/wo/wi): pale yellow, not red.
+function describeError(error) {
+  const partial = KEYS.filter((k) => k.length > 1 && k.startsWith(error.char.toLowerCase()));
+  const at = ` (character ${error.index + 1})`;
+  if (partial.length) return { partial: true, nodes: [code('“' + error.char + '”'), at + ' needs another letter: ', ...list(partial.sort()), '.'] };
+  if (/\d/.test(error.char)) {
+    if (!error.after) return { partial: false, nodes: [code(error.char), at + ' needs a letter before it, as in ', code('lo2'), '.'] };
+    const forms = formsOf(error.after);
+    return { partial: false, nodes: [code(error.after + error.char), at + ' isn’t a form. ',
+      ...(forms.length ? [code(error.after), ' has ', ...list(forms.map((d) => error.after + d)), '.'] : [code(error.after), ' has no numbered forms.'])] };
+  }
+  return { partial: false, nodes: ['No Duployan letter for ', code('“' + error.char + '”'), at + '. Respell it, or open “Letters you can use”.'] };
+}
+
+// One row per distinct word: the word, its spelling (with the first unreadable
+// character marked), fuzzy/verified state, and a button to verify as is.
+function makeWordRow(w) {
+  const row = document.createElement('div');
+  row.className = 'word-row';
+  row.dataset.word = w;
+  const id = 'w-' + Array.from(w).map((c) => c.codePointAt(0).toString(36)).join('-');
+  const label = Object.assign(document.createElement('label'), { className: 'word-chn', htmlFor: id, textContent: w });
+  const field = Object.assign(document.createElement('div'), { className: 'dup-field' });
+  const backdrop = Object.assign(document.createElement('div'), { className: 'dup-backdrop' });
+  backdrop.setAttribute('aria-hidden', 'true');
+  const input = Object.assign(document.createElement('input'), { id, type: 'text', autocomplete: 'off', spellcheck: false, value: draftSpelling(w).dup });
+  input.setAttribute('autocapitalize', 'off');
+  field.append(backdrop, input);
+  const pill = Object.assign(document.createElement('span'), { className: 'pill' });
+  const verify = Object.assign(document.createElement('button'), { type: 'button', className: 'verify', textContent: '✓' });
+  verify.setAttribute('aria-label', `Mark the spelling of ${w} as verified`);
+  const err = Object.assign(document.createElement('p'), { className: 'dup-error' });
+  err.setAttribute('aria-live', 'polite');
+  input.setAttribute('aria-describedby', err.id = id + '-err');
+  row.append(label, field, pill, verify, err);
+
+  const sync = () => { backdrop.scrollLeft = input.scrollLeft; };
+  for (const type of ['scroll', 'keyup', 'click', 'select', 'focus']) input.addEventListener(type, sync);
+  input.addEventListener('input', () => {
+    pending.set(w, { dup: input.value, verified: true });
+    disarmDelete();
+    refresh();
+  });
+  verify.addEventListener('click', () => {
+    pending.set(w, { dup: input.value, verified: true });
+    refresh();
+  });
+  row.update = () => {
+    const sp = draftSpelling(w);
+    const value = input.value;
+    const { error } = toDuployan(value);
+    const empty = !value.trim();
+    backdrop.replaceChildren();
+    let partial = false;
+    if (error) {
+      const d = describeError(error);
+      partial = d.partial;
+      const end = error.index + error.char.length;
+      const mark = document.createElement('mark');
+      mark.textContent = value.slice(error.index, end);
+      mark.classList.toggle('is-partial', partial);
+      backdrop.append(value.slice(0, error.index), mark, value.slice(end));
+      err.replaceChildren(...d.nodes);
+    } else {
+      backdrop.textContent = value;
+      err.textContent = empty ? 'Needs a spelling.' : '';
+    }
+    err.classList.toggle('is-partial', partial);
+    field.classList.toggle('has-error', (!!error && !partial) || empty);
+    field.classList.toggle('has-partial', partial);
+    input.setAttribute('aria-invalid', error || empty ? 'true' : 'false');
+    row.classList.toggle('is-fuzzy', !sp.verified);
+    pill.className = 'pill ' + (sp.verified ? 'is-verified' : 'is-fuzzy');
+    pill.textContent = sp.verified ? 'verified' : 'fuzzy';
+    verify.disabled = sp.verified;
+    sync();
+    return !error && !empty;
+  };
+  return row;
 }
 
 function refresh() {
   const card = formCard();
-  const { error } = toDuployan(card.dup);
 
-  // Mirror the dup text and mark the first letter the converter can't read:
-  // pale yellow when it only starts a longer letter (w → wa/wo/wi), red otherwise.
-  els.backdrop.replaceChildren();
-  const partial = error ? KEYS.filter((k) => k.length > 1 && k.startsWith(error.char.toLowerCase())) : [];
-  if (error) {
-    const v = card.dup;
-    const end = error.index + error.char.length;
-    const mark = document.createElement('mark');
-    mark.textContent = v.slice(error.index, end);
-    mark.classList.toggle('is-partial', partial.length > 0);
-    els.backdrop.append(v.slice(0, error.index), mark, v.slice(end));
-    const code = (t) => Object.assign(document.createElement('code'), { textContent: t });
-    if (partial.length) {
-      const options = partial.sort().flatMap((k, i) => [i ? (i === partial.length - 1 ? ' or ' : ', ') : '', code(k)]);
-      els.dupError.replaceChildren(code('“' + error.char + '”'), ` (character ${error.index + 1}) needs another letter: `, ...options, '.');
-    } else if (/\d/.test(error.char)) {
-      const list = (items) => items.flatMap((k, i) => [i ? (i === items.length - 1 ? ' or ' : ', ') : '', code(k)]);
-      const forms = error.after ? formsOf(error.after) : [];
-      els.dupError.replaceChildren(
-        ...(error.after
-          ? [code(error.after + error.char), ` (character ${error.index + 1}) isn’t a form. `,
-             ...(forms.length ? [code(error.after), ' has ', ...list(forms.map((d) => error.after + d)), '.'] : [code(error.after), ' has no numbered forms.'])]
-          : [code(error.char), ` (character ${error.index + 1}) needs a letter before it, as in `, code('lo2'), '.'])
-      );
-    } else {
-      els.dupError.replaceChildren(
-        'No Duployan letter for ',
-        code('“' + error.char + '”'),
-        ` (character ${error.index + 1}). Respell it, or open “Letters you can use”.`
-      );
-    }
-  } else {
-    els.backdrop.textContent = card.dup;
-    els.dupError.textContent = '';
-  }
-  els.dupError.classList.toggle('is-partial', partial.length > 0);
-  els.dupField.classList.toggle('has-error', !!error && !partial.length);
-  els.dupField.classList.toggle('has-partial', partial.length > 0);
-  els.dup.setAttribute('aria-invalid', error ? 'true' : 'false');
-  syncBackdrop();
+  // Keep one row per distinct word, in order, reusing rows so typing isn't lost.
+  const keys = wordsOf(card.chn);
+  const existing = new Map([...els.words.children].map((r) => [r.dataset.word, r]));
+  const rows = keys.map((w) => existing.get(w) || makeWordRow(w));
+  els.words.replaceChildren(...rows);
+  els.wordsEmpty.hidden = keys.length > 0;
+  const allValid = rows.map((r) => r.update()).every(Boolean);
 
-  els.preview.replaceChildren(cardFace(card));
-  const empty = !card.dup.trim() && !card.chn.trim() && !card.en.trim();
-  els.save.disabled = !!error || empty;
+  els.preview.replaceChildren(cardFace(card, draftSpell));
+  const empty = !card.chn.trim() && !card.en.trim();
+  els.save.disabled = !allValid || empty;
 }
 
 function say(msg) {
@@ -528,6 +651,7 @@ function disarmDelete() {
 
 function startNew() {
   editingId = null;
+  pending = new Map();
   els.title.textContent = 'New card';
   els.save.textContent = 'Add card';
   els.cancel.hidden = true;
@@ -540,6 +664,7 @@ function startNew() {
 
 function startEdit(card) {
   editingId = card.id;
+  pending = new Map();
   els.title.textContent = 'Edit card';
   els.save.textContent = 'Save changes';
   els.cancel.hidden = false;
@@ -550,13 +675,19 @@ function startEdit(card) {
   setForm(card);
   markCurrent();
   els.editor.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
-  els.dup.focus({ preventScroll: true });
+  els.chn.focus({ preventScroll: true });
+}
+
+// Save this card's word spellings: edits as verified, guesses as fuzzy.
+function commitWords(card) {
+  for (const w of wordsOf(card.chn)) words[w] = { ...draftSpelling(w) };
 }
 
 els.form.addEventListener('submit', (ev) => {
   ev.preventDefault();
   if (els.save.disabled) return;
   const card = formCard();
+  commitWords(card);
   if (editingId) {
     cards = cards.map((c) => (c.id === editingId ? { ...c, ...card } : c));
     persist();
@@ -588,11 +719,8 @@ els.del.addEventListener('click', () => {
   say('Card deleted.');
 });
 
-for (const el of [els.dup, els.chn, els.en, els.klale]) {
+for (const el of [els.chn, els.en, els.klale]) {
   el.addEventListener('input', () => { disarmDelete(); refresh(); });
-}
-for (const type of ['scroll', 'keyup', 'click', 'select', 'focus']) {
-  els.dup.addEventListener(type, syncBackdrop);
 }
 
 // Letters legend: every letter, then its numbered forms beside it
@@ -624,14 +752,16 @@ function renderDeck() {
     btn.type = 'button';
     btn.className = 'deck-item';
     btn.dataset.id = card.id;
-    btn.setAttribute('aria-label', 'Edit card: ' + (card.chn || card.en || card.dup || 'blank'));
+    btn.setAttribute('aria-label', 'Edit card: ' + (card.chn || card.en || 'blank'));
     btn.append(cardFace(card));
     btn.addEventListener('click', () => startEdit(card));
     els.deck.append(btn);
   }
   markCurrent();
   const black = cards.filter((c) => c.prompt).length;
-  els.tally.textContent = `${cards.length} card${cards.length === 1 ? '' : 's'} · ${black} klale · ${cards.length - black} white`;
+  const used = new Set(cards.flatMap((c) => wordsOf(c.chn)));
+  const fuzzy = [...used].filter((w) => !(words[w] && words[w].verified)).length;
+  els.tally.textContent = `${cards.length} card${cards.length === 1 ? '' : 's'} · ${black} klale · ${cards.length - black} white · ${fuzzy} fuzzy word${fuzzy === 1 ? '' : 's'}`;
   els.deckEmpty.hidden = cards.length > 0;
   els.deckEmpty.textContent = 'No cards yet. Add the first one with the form above, or import a .zip.';
 }
@@ -660,13 +790,19 @@ els.bannerCancel.addEventListener('click', hideBanner);
 function exportList() {
   return [...cards]
     .sort((a, b) => a.created - b.created)
-    .map(({ chn, dup, en, prompt }) => ({ chn, dup, en, prompt }));
+    .map(({ chn, en, prompt }) => ({ chn, en, prompt }));
+}
+
+// The word list, alphabetical, for words.json.
+function exportWords() {
+  return Object.fromEntries(Object.keys(words).sort().map((w) => [w, words[w]]));
 }
 
 els.exportBtn.addEventListener('click', async () => {
   if (!window.JSZip) { showBanner('The zip library didn’t load. Check your connection and reload the page.', { error: true }); return; }
   const zip = new JSZip();
   zip.file('cards.json', JSON.stringify(exportList(), null, 2) + '\n');
+  zip.file('words.json', JSON.stringify(exportWords(), null, 2) + '\n');
   const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -687,12 +823,14 @@ els.importBtn.addEventListener('click', () => {
 els.importFile.addEventListener('change', async () => {
   const file = els.importFile.files[0];
   if (!file) return;
-  let list;
+  let list, wordList = null;
   try {
     const zip = await JSZip.loadAsync(file);
     const entry = zip.file('cards.json') || zip.file(/(^|\/)cards\.json$/)[0];
     if (!entry) { showBanner(`${file.name} has no cards.json inside.`, { error: true }); return; }
     list = JSON.parse(await entry.async('string'));
+    const wordEntry = zip.file('words.json') || zip.file(/(^|\/)words\.json$/)[0];
+    if (wordEntry) wordList = normalizeWords(JSON.parse(await wordEntry.async('string')));
   } catch {
     showBanner(`${file.name} isn’t a zip with a readable cards.json.`, { error: true });
     return;
@@ -700,8 +838,11 @@ els.importFile.addEventListener('change', async () => {
   if (!Array.isArray(list)) { showBanner('cards.json should be a list of cards.', { error: true }); return; }
   const incoming = normalize(list).reverse();   // file is oldest first; deck shows newest first
   showBanner(
-    `Replace your ${cards.length} card${cards.length === 1 ? '' : 's'} with the ${incoming.length} in ${file.name}?`,
+    `Replace your ${cards.length} card${cards.length === 1 ? '' : 's'} with the ${incoming.length} in ${file.name}?` +
+      (wordList ? ` Its ${Object.keys(wordList).length} word spellings replace yours too.` : ''),
     { confirm: () => {
+      if (wordList) words = wordList;
+      adoptLegacySpellings(incoming);
       cards = incoming;
       persist();
       startNew();
@@ -823,7 +964,7 @@ function cardCanvas(card) {
   const chnStyle = { size: 46, lh: 46 * 1.3, blankEm: 3.5, font: (it) => `${it ? 'italic ' : ''}700 46px ${LATIN}` };
   const enStyle = { size: 30, lh: 30 * 1.35, blankEm: 3.5, font: (it) => `${it ? 'italic ' : ''}30px ${LATIN}` };
 
-  const dupLines = wrap(ctx, atomsOf(toDuployan(card.dup || '').text, false), dupStyle, inner - 20);
+  const dupLines = wrap(ctx, atomsOf(cardDuployan(card), false), dupStyle, inner - 20);
   const chnLines = wrap(ctx, atomsOf(card.chn || '', true), chnStyle, inner);
   const enLines = wrap(ctx, atomsOf(card.en || '', true), enStyle, inner);
   const hd = dupLines.length * dupStyle.lh, hc = chnLines.length * chnStyle.lh, he = enLines.length * enStyle.lh;
@@ -864,6 +1005,7 @@ els.imagesBtn.addEventListener('click', async () => {
     const list = [...cards].sort((a, b) => a.created - b.created);
     const zip = new JSZip();
     zip.file('cards.json', JSON.stringify(exportList(), null, 2) + '\n');
+    zip.file('words.json', JSON.stringify(exportWords(), null, 2) + '\n');
 
     // PDF: US Letter, 3 x 3 cards per page at poker size (2.5 x 3.5 in).
     const pdf = new jspdf.jsPDF({ unit: 'in', format: 'letter' });
@@ -893,19 +1035,27 @@ els.imagesBtn.addEventListener('click', async () => {
 startNew();
 
 (async () => {
-  const stored = loadStored();
-  if (stored) {
-    cards = stored.sort((a, b) => b.created - a.created);
+  const fetchJson = async (name) => {
+    try {
+      const res = await fetch(name, { cache: 'no-cache' });
+      return res.ok ? await res.json() : null;
+    } catch {
+      return null;
+    }
+  };
+  const storedWords = readJson(WORDS_KEY);
+  words = normalizeWords(storedWords ?? await fetchJson('words.json'));
+  const stored = readJson(STORE_KEY);
+  if (Array.isArray(stored)) {
+    cards = normalize(stored).sort((a, b) => b.created - a.created);
   } else {
     // First visit: start from the deck in the repo.
-    try {
-      const res = await fetch('cards.json', { cache: 'no-cache' });
-      cards = normalize(await res.json()).reverse();
-    } catch {
-      cards = [];
-    }
-    persist();
+    const list = await fetchJson('cards.json');
+    cards = Array.isArray(list) ? normalize(list).reverse() : [];
   }
+  adoptLegacySpellings(cards);
+  persist();
+  startNew();   // rebuild the word rows now that the saved spellings are loaded
   renderDeck();
 })();
 </script>

@@ -52,7 +52,7 @@
   const KEYS = Object.keys(LETTERS)
     .filter((k) => !/\d$/.test(k))
     .sort((a, b) => b.length - a.length);
-  const PASSTHROUGH = /[\s_.,;:!?"()]/;
+  const PASSTHROUGH = /[\s\p{P}\p{S}]/u;
 
   // The digits that follow `key` to make one of its numbered forms.
   const formsOf = (key) => Object.keys(LETTERS)
@@ -93,5 +93,124 @@
     return { text: out, error: null };
   }
 
-  return { LETTERS, KEYS, formsOf, toDuployan };
+  // Split a spelling into its letters the way toDuployan reads it (no digits).
+  function tokens(dup) {
+    const out = [];
+    for (let i = 0; i < dup.length;) {
+      if (dup[i] === "'") { i++; continue; }
+      const key = KEYS.find((k) => dup.startsWith(k, i));
+      if (!key) return null;
+      out.push(key);
+      i += key.length;
+    }
+    return out;
+  }
+
+  // ----- Words -----
+  // A Chinook word: letters, with apostrophes allowed inside (k'au).
+  const WORD = /[\p{L}\p{M}]+(?:['’][\p{L}\p{M}]+)*/gu;
+  const stripItalics = (s) => s.replace(/\*([^*]+)\*/g, '$1');
+  const wordKey = (w) => w.normalize('NFC').toLowerCase().replace(/’/g, "'");
+
+  // The distinct words of a card's Chinook text, in order.
+  function wordsOf(chn) {
+    const seen = new Set();
+    for (const m of stripItalics(chn).matchAll(WORD)) seen.add(wordKey(m[0]));
+    return [...seen];
+  }
+
+  // A card's dup line: each Chinook word replaced by spell(word), with the
+  // spaces, punctuation and blanks between words kept.
+  function cardDup(chn, spell) {
+    const s = stripItalics(chn);
+    let out = '';
+    let last = 0;
+    for (const m of s.matchAll(WORD)) {
+      out += s.slice(last, m.index) + spell(wordKey(m[0]));
+      last = m.index + m[0].length;
+    }
+    return out + s.slice(last);
+  }
+
+  // ----- Guessing a spelling for an unknown word -----
+  // Units: { t: spelling, kind: 'C' consonant | 'V' vowel | 'W' w + vowel | 'Y' y glide }
+  const ONSETS = /^(?:[pbtdkgf]l|s[ptk])$/;   // clusters that can start a syllable
+
+  function unitsOf(word) {
+    let w = word.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/['’]/g, '');
+    // Letters with no Duployan spelling of their own become the nearest one.
+    w = w.replace(/qu/g, 'kw').replace(/j/g, 'ch').replace(/q/g, 'k').replace(/z/g, 's').replace(/c(?!h)/g, 'k')
+      .replace(/([bdfghklmnprstvx])\1/g, '$1');
+    const units = [];
+    const isVowel = (ch) => !!ch && 'aeiouy'.includes(ch);
+    for (let i = 0; i < w.length;) {
+      const rest = w.slice(i);
+      let m;
+      if ((m = rest.match(/^(ch|sh|th|ts|ng)/))) { units.push({ t: m[1], kind: 'C' }); i += 2; continue; }
+      if ((m = rest.match(/^(oo|u)/))) { units.push({ t: 'oo', kind: 'V' }); i += m[1].length; continue; }
+      if ((m = rest.match(/^au(?![aeiou])/))) { units.push({ t: 'aw', kind: 'V' }); i += 2; continue; }
+      if (rest.startsWith('ee')) { units.push({ t: 'i', kind: 'V' }); i += 2; continue; }
+      if ((m = rest.match(/^([ao])w(?![aeiou])/))) { units.push({ t: m[1] + 'w', kind: 'V' }); i += 2; continue; }
+      const ch = w[i];
+      if ('aeio'.includes(ch)) { units.push({ t: ch, kind: 'V' }); i++; continue; }
+      if (ch === 'w') {
+        const v = w[i + 1];
+        if (v && 'aoie'.includes(v)) { units.push({ t: 'w' + (v === 'e' ? 'i' : v), kind: 'W' }); i += 2; }
+        else { units.push({ t: 'oo', kind: 'V' }); i++; }
+        continue;
+      }
+      if (ch === 'y') {
+        units.push(isVowel(w[i + 1]) && w[i + 1] !== 'y' ? { t: 'i', kind: 'Y' } : { t: 'i', kind: 'V' });
+        i++;
+        continue;
+      }
+      if (LETTERS[ch]) units.push({ t: ch, kind: 'C' });
+      i++;   // anything else is dropped
+    }
+    return units;
+  }
+
+  // Group units into syllables: V-CV, VC-CV, and keep onset clusters like kl, sk together.
+  function syllables(units) {
+    const isNucleus = (u) => u.kind === 'V' || u.kind === 'W';
+    const nuclei = units.map((u, i) => (isNucleus(u) ? i : -1)).filter((i) => i >= 0);
+    if (nuclei.length < 2) return [units];
+    const cuts = [];
+    for (let n = 1; n < nuclei.length; n++) {
+      const prev = nuclei[n - 1], cur = nuclei[n];
+      const between = units.slice(prev + 1, cur);
+      if (units[cur].kind === 'W') { cuts.push(prev + 1 + between.length); continue; }  // wa/wo/wi start a syllable
+      if (between.length === 0) continue;                                         // vowel pair: one syllable (nai)
+      if (between.length === 1) { cuts.push(prev + 1); continue; }                // V-CV
+      const lastTwo = between.slice(-2).map((u) => u.t).join('');
+      cuts.push(cur - (ONSETS.test(lastTwo) ? 2 : 1));                            // VC-CV, or V-CCV for kl/sk
+    }
+    const out = [];
+    let start = 0;
+    for (const c of cuts) { if (c > start) { out.push(units.slice(start, c)); start = c; } }
+    out.push(units.slice(start));
+    return out;
+  }
+
+  // Join a syllable's units, adding an apostrophe only where letters would merge.
+  function spellSyllable(units) {
+    let s = '';
+    const want = [];
+    for (const u of units) {
+      const t = u.kind === 'Y' ? 'i' : u.t;
+      want.push(t);
+      const joined = s + t;
+      const got = tokens(joined);
+      s = got && got.join('|') === want.join('|') ? joined : s + "'" + t;
+    }
+    return s;
+  }
+
+  function guess(word) {
+    const units = unitsOf(word);
+    if (!units.length) return '';
+    return syllables(units).map(spellSyllable).join('-');
+  }
+
+  return { LETTERS, KEYS, formsOf, toDuployan, tokens, wordsOf, wordKey, cardDup, guess };
 });

@@ -2,14 +2,15 @@
 // Render each card in cards.json to its own PNG: Duployan on top, Chinook in
 // the middle, English at the bottom.
 //
-// The "dup" field is a romanized spelling, converted to Duployan by dup.js.
+// The Duployan line is built word by word from the Chinook text: each word's
+// spelling comes from words.json, or is guessed (dup.js) when it isn't there.
 //
-// Usage: node render.js [cards.json] [out-dir]
+// Usage: node render.js [cards.json] [out-dir] [words.json]
 
 const fs = require('fs');
 const path = require('path');
 
-const { toDuployan: convert } = require('./dup.js');
+const { toDuployan: convert, cardDup, guess } = require('./dup.js');
 
 function toDuployan(dup) {
   const { text, error } = convert(dup);
@@ -62,12 +63,20 @@ async function main() {
   const font = fs.readFileSync(path.join(__dirname, 'fonts', 'RawndMusmusDuployan-Regular.woff2'));
   const fontUrl = 'data:font/woff2;base64,' + font.toString('base64');
   const cards = JSON.parse(fs.readFileSync(cardsPath, 'utf8'));
+  const wordsPath = path.resolve(process.argv[4] || path.join(__dirname, 'words.json'));
+  const words = fs.existsSync(wordsPath) ? JSON.parse(fs.readFileSync(wordsPath, 'utf8')) : {};
+  const guessed = new Set();
+  const spell = (w) => {
+    if (words[w]) return words[w].dup;
+    guessed.add(w);
+    return guess(w);
+  };
 
   // Validate every card before rendering anything.
   const errors = [];
   const converted = cards.map((card, n) => {
     try {
-      return toDuployan(card.dup);
+      return toDuployan(cardDup(card.chn || '', spell));
     } catch (e) {
       errors.push(`card ${n + 1}: ${e.message}`);
       return null;
@@ -77,6 +86,7 @@ async function main() {
     console.error(errors.join('\n'));
     process.exit(1);
   }
+  if (guessed.size) console.log(`guessed (not in words.json): ${[...guessed].join(', ')}`);
 
   const { chromium } = require('playwright');
   fs.mkdirSync(outDir, { recursive: true });
