@@ -9,6 +9,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400;1,700&family=IBM+Plex+Mono:wght@400;500&family=Instrument+Serif&display=swap">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="dup.js"></script>
 <style>
 @font-face {
   font-family: "Duployan Chinook";
@@ -304,7 +305,7 @@ body {
           <input id="f-dup" name="dup" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="dup-error dup-hint">
         </div>
         <p class="dup-error" id="dup-error" aria-live="polite"></p>
-        <p class="hint" id="dup-hint">A dash breaks the stroke between syllables (<code>ka-na-wi</code>). An apostrophe splits letters that would otherwise join: <code>owa</code> is ow&nbsp;+&nbsp;a, <code>o'wa</code> is o&nbsp;+&nbsp;wa. A <code>2</code> after a vowel turns it the other way: <code>lo2</code>.</p>
+        <p class="hint" id="dup-hint">A dash breaks the stroke between syllables (<code>ka-na-wi</code>). An apostrophe splits letters that would otherwise join: <code>owa</code> is ow&nbsp;+&nbsp;a, <code>o'wa</code> is o&nbsp;+&nbsp;wa. A number after a letter picks an alternate form: <code>lo2</code> turns the o the other way (<code>lo\2</code> and <code>lo/2</code> work too).</p>
         <details class="letters">
           <summary>Letters you can use</summary>
           <dl id="letters"></dl>
@@ -349,54 +350,8 @@ body {
 </div>
 
 <script>
-// ----- Duployan converter (same rules as render.js) -----
-const LETTERS = {
-  a: 0x1bc41, o: 0x1bc44, oo: 0x1bc5b, ow: 0x1bc5a, wa: 0x1bc5c, wo: 0x1bc5d, wi: 0x1bc5e,
-  e: 0x1bc47, i: 0x1bc46,
-  h: 0x1bc00, p: 0x1bc02, b: 0x1bc07, t: 0x1bc03, d: 0x1bc08, k: 0x1bc05, g: 0x1bc0a,
-  f: 0x1bc04, v: 0x1bc09, l: 0x1bc06, r: 0x1bc0b, m: 0x1bc19, n: 0x1bc1a,
-  s: 0x1bc1c, sh: 0x1bc1b, ch: 0x1bc23, ts: 0x1bc25, th: 0x1bc11,
-};
-const KEYS = Object.keys(LETTERS).sort((a, b) => b.length - a.length);
-
-// A "2" right after a vowel selects its alternate form (turned the other way).
-const CGJ3 = '\u034F\u034F\u034F';
-const ALTERNATES = {
-  a: '\u{1BC42}', // reversed A (SLOAN OW)
-  e: '\u{1BC46}', // E turned the other way is I
-  i: '\u{1BC47}', // I turned the other way is E
-};
-// Circle vowels: three CGJs reverse the circle (a Rawnd Musmus Duployan convention).
-for (const k of ['o', 'oo', 'ow', 'wa', 'wo', 'wi']) ALTERNATES[k] = String.fromCodePoint(LETTERS[k]) + CGJ3;
-const PASSTHROUGH = /[\s_.,;:!?"()]/;
-const ZWNJ = '‌';
-
-function toDuployan(dup) {
-  const src = dup.toLowerCase();
-  let out = '';
-  let i = 0;
-  while (i < src.length) {
-    const ch = src[i];
-    if (ch === "'") { i++; continue; }
-    if (ch === '-') { out += ZWNJ; i++; continue; }
-    if (PASSTHROUGH.test(ch)) { out += ch; i++; continue; }
-    const key = KEYS.find((k) => src.startsWith(k, i));
-    if (!key) {
-      const bad = Array.from(dup.slice(i))[0];
-      return { text: out, error: { index: i, char: bad } };
-    }
-    const next = i + key.length;
-    if (src[next] === '2') {
-      if (!ALTERNATES[key]) return { text: out, error: { index: next, char: '2' } };
-      out += ALTERNATES[key];
-      i = next + 1;
-    } else {
-      out += String.fromCodePoint(LETTERS[key]);
-      i = next;
-    }
-  }
-  return { text: out, error: null };
-}
+// ----- Duployan converter (dup.js, shared with render.js) -----
+const { LETTERS, KEYS, formsOf, toDuployan } = Dup;
 
 // ----- Card rendering -----
 function fillText(el, s, italics) {
@@ -480,7 +435,7 @@ function persist() {
 }
 
 // ----- Editor -----
-const DEFAULTS = { dup: 'kla-how-ia, ka-nawi ili-hi', chn: 'klahowya, kanawi ilihi', en: 'Hello, world', prompt: false };
+const DEFAULTS = { dup: 'kla-how-ia, ka-na\'wi ili-hi', chn: 'klahowya, kanawi ilihi', en: 'Hello, world', prompt: false };
 const $ = (id) => document.getElementById(id);
 const els = {
   editor: $('editor'), form: $('form'), title: $('editor-title'),
@@ -531,10 +486,14 @@ function refresh() {
     if (partial.length) {
       const options = partial.sort().flatMap((k, i) => [i ? (i === partial.length - 1 ? ' or ' : ', ') : '', code(k)]);
       els.dupError.replaceChildren(code('“' + error.char + '”'), ` (character ${error.index + 1}) needs another letter: `, ...options, '.');
-    } else if (error.char === '2') {
+    } else if (/\d/.test(error.char)) {
+      const list = (items) => items.flatMap((k, i) => [i ? (i === items.length - 1 ? ' or ' : ', ') : '', code(k)]);
+      const forms = error.after ? formsOf(error.after) : [];
       els.dupError.replaceChildren(
-        code('2'), ` (character ${error.index + 1}) only goes after a vowel: `,
-        ...Object.keys(ALTERNATES).flatMap((k, i, all) => [i ? (i === all.length - 1 ? ' or ' : ', ') : '', code(k)]), '.'
+        ...(error.after
+          ? [code(error.after + error.char), ` (character ${error.index + 1}) isn’t a form. `,
+             ...(forms.length ? [code(error.after), ' has ', ...list(forms.map((d) => error.after + d)), '.'] : [code(error.after), ' has no numbered forms.'])]
+          : [code(error.char), ` (character ${error.index + 1}) needs a letter before it, as in `, code('lo2'), '.'])
       );
     } else {
       els.dupError.replaceChildren(
@@ -636,17 +595,20 @@ for (const type of ['scroll', 'keyup', 'click', 'select', 'focus']) {
   els.dup.addEventListener(type, syncBackdrop);
 }
 
-// Letters legend
+// Letters legend: every letter, then its numbered forms beside it
 (function buildLegend() {
-  const order = ['a','e','i','o','oo','ow','wa','wo','wi','p','b','t','d','k','g','f','v','th','ch','ts','s','sh','h','l','r','m','n'];
+  const order = ['a','e','i','o','oo','ow','aw','wa','wo','wi','wei','waw','yu','eu','aN','oN','iN','uN',
+    'p','b','t','d','th','k','g',"k'",'f','v','ch','ts','c','s','sh','h','x','l','lh','hl','r','rh','m','n','ng'];
   for (const k of order) {
-    const row = document.createElement('div');
-    const dt = document.createElement('dt');
-    dt.append(Object.assign(document.createElement('code'), { textContent: k }));
-    const dd = document.createElement('dd');
-    dd.textContent = String.fromCodePoint(LETTERS[k]);
-    row.append(dt, dd);
-    $('letters').append(row);
+    for (const key of [k, ...formsOf(k).map((d) => k + d)]) {
+      const row = document.createElement('div');
+      const dt = document.createElement('dt');
+      dt.append(Object.assign(document.createElement('code'), { textContent: key }));
+      const dd = document.createElement('dd');
+      dd.textContent = LETTERS[key];
+      row.append(dt, dd);
+      $('letters').append(row);
+    }
   }
 })();
 

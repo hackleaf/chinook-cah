@@ -2,95 +2,22 @@
 // Render each card in cards.json to its own PNG: Duployan on top, Chinook in
 // the middle, English at the bottom.
 //
-// The "dup" field is a romanized spelling that is converted to Duployan:
-//   - letters are parsed greedily (longest match first), so "owa" = ow + a
-//   - an apostrophe forces a break in the parse and is dropped: "o'wa" = o + wa
-//   - a dash marks a syllable break and becomes U+200C ZERO WIDTH NON-JOINER
-//   - spaces and punctuation (including the "_" blank) pass through unchanged
+// The "dup" field is a romanized spelling, converted to Duployan by dup.js.
 //
 // Usage: node render.js [cards.json] [out-dir]
 
 const fs = require('fs');
 const path = require('path');
 
-const ZWNJ = '‌';
-
-// Romanized letter -> Duployan code point. Only these letters are allowed.
-const LETTERS = {
-  a: 0x1bc41, // A
-  o: 0x1bc44, // O
-  oo: 0x1bc5b, // OU
-  ow: 0x1bc5a, // OW
-  wa: 0x1bc5c, // WA
-  wo: 0x1bc5d, // WO
-  wi: 0x1bc5e, // WI
-  e: 0x1bc47, // E
-  i: 0x1bc46, // I
-  h: 0x1bc00, // H
-  p: 0x1bc02, // P
-  l: 0x1bc06, // L
-  t: 0x1bc03, // T
-  k: 0x1bc05, // K
-  s: 0x1bc1c, // S
-  sh: 0x1bc1b, // J
-  n: 0x1bc1a, // N
-  m: 0x1bc19, // M
-  ch: 0x1bc23, // J WITH DOT
-  ts: 0x1bc25, // S WITH DOT
-  th: 0x1bc11, // TH
-  b: 0x1bc07, // B
-  d: 0x1bc08, // D
-  f: 0x1bc04, // F
-  v: 0x1bc09, // V
-  g: 0x1bc0a, // G
-  r: 0x1bc0b, // R
-};
-const KEYS = Object.keys(LETTERS).sort((a, b) => b.length - a.length);
-
-// A "2" right after a vowel selects its alternate form (turned the other way).
-const CGJ3 = '\u034F\u034F\u034F';
-const ALTERNATES = {
-  a: '\u{1BC42}', // reversed A (SLOAN OW)
-  e: '\u{1BC46}', // E turned the other way is I
-  i: '\u{1BC47}', // I turned the other way is E
-};
-// Circle vowels: three CGJs reverse the circle (a Rawnd Musmus Duployan convention).
-for (const k of ['o', 'oo', 'ow', 'wa', 'wo', 'wi']) ALTERNATES[k] = String.fromCodePoint(LETTERS[k]) + CGJ3;
-const PASSTHROUGH = /[\s_.,;:!?"()]/;
+const { toDuployan: convert } = require('./dup.js');
 
 function toDuployan(dup) {
-  const src = dup.toLowerCase();
-  let out = '';
-  let i = 0;
-  while (i < src.length) {
-    const ch = src[i];
-    if (ch === "'") {
-      i++;
-    } else if (ch === '-') {
-      out += ZWNJ;
-      i++;
-    } else if (PASSTHROUGH.test(ch)) {
-      out += ch;
-      i++;
-    } else {
-      const key = KEYS.find((k) => src.startsWith(k, i));
-      if (!key) {
-        throw new Error(`unsupported letter "${dup[i]}" at position ${i} in "${dup}"`);
-      }
-      const next = i + key.length;
-      if (src[next] === '2') {
-        if (!ALTERNATES[key]) {
-          throw new Error(`"${key}" has no alternate form ("2" at position ${next}) in "${dup}"`);
-        }
-        out += ALTERNATES[key];
-        i = next + 1;
-      } else {
-        out += String.fromCodePoint(LETTERS[key]);
-        i = next;
-      }
-    }
+  const { text, error } = convert(dup);
+  if (error) {
+    const what = error.after ? `"${error.after}" has no form ${error.char}` : `unsupported letter "${error.char}"`;
+    throw new Error(`${what} at position ${error.index} in "${dup}"`);
   }
-  return out;
+  return text;
 }
 
 const esc = (s) =>
