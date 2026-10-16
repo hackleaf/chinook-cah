@@ -1,4 +1,18 @@
-[
-  {"chn": "_, kanawi tlush", "en": "_, always good", "prompt": true},
-  {"chn": "pus skukum haws naika, ipsut naika lolo _", "en": "if i went to jail, i'd secretly bring _", "prompt": true}
-]
+{
+  "cards": [
+    {"chn": "_, kanawi tlush", "en": "_, always good", "prompt": true},
+    {"chn": "pus skukum haws naika, ipsut naika lolo _", "en": "if i went to jail, i'd secretly bring _", "prompt": true}
+  ],
+  "words": {
+    "haws": {"dup": "hows", "verified": false},
+    "ilihi": {"dup": "ili-hi", "verified": false},
+    "ipsut": {"dup": "ip-soot", "verified": false},
+    "kanawi": {"dup": "ka-na-wi", "verified": false},
+    "klahowya": {"dup": "kla-how-ia", "verified": false},
+    "lolo": {"dup": "lo2-lo2", "verified": false},
+    "naika": {"dup": "nai-ka", "verified": false},
+    "pus": {"dup": "poo2s", "verified": false},
+    "skukum": {"dup": "skoo-kam", "verified": false},
+    "tlush": {"dup": "tloosh", "verified": false}
+  }
+}
