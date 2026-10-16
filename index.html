@@ -283,7 +283,7 @@ body {
 /* One row per distinct Chinook word: word, spelling, state, verify */
 .words {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(2.5em, max-content) 6.2em 34px;
+  grid-template-columns: minmax(0, 1fr) minmax(2.5em, max-content) 34px;
   gap: 6px 10px;
   align-items: center;
 }
@@ -291,26 +291,14 @@ body {
 .words .word-chn { grid-column: 1 / -1; margin-top: 4px; }
 .words .dup-error { grid-column: 1 / -1; }
 @media (min-width: 900px) {
-  .fix .words { grid-template-columns: minmax(5.5em, max-content) minmax(0, 1fr) minmax(2.5em, max-content) 6.2em 34px; gap: 10px; }
+  .fix .words { grid-template-columns: minmax(5.5em, max-content) minmax(0, 1fr) minmax(2.5em, max-content) 34px; gap: 10px; }
   .fix .words .word-chn { grid-column: auto; margin-top: 0; }
   .fix .words .dup-error { grid-column: 2 / -1; }
 }
 .word-row { display: contents; }
-.word-row .pill { justify-self: start; }
 .word-dupl { font-family: var(--dupl); font-size: 1.7rem; line-height: 1.2; white-space: nowrap; color: var(--fg); justify-self: center; }
 label.word-chn { font: 700 1rem/1.3 var(--body); text-transform: none; letter-spacing: 0; color: var(--fg); overflow-wrap: anywhere; }
 .word-row.is-fuzzy .dup-field:not(.has-error):not(.has-partial) { background: var(--fuzzy-bg); border-color: var(--fuzzy); }
-.pill {
-  display: inline-block;
-  font: 700 0.72rem/1 var(--body);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  padding: 4px 8px;
-  border-radius: 999px;
-  border: 1px solid currentColor;
-}
-.pill.is-fuzzy { color: var(--fuzzy); background: var(--fuzzy-bg); }
-.pill.is-verified { color: var(--accent); }
 .verify {
   font: 700 1rem/1 var(--body);
   width: 34px; height: 34px;
@@ -419,7 +407,7 @@ label.word-chn { font: 700 1rem/1.3 var(--body); text-transform: none; letter-sp
     <h2 id="fix-title">Fix spelling</h2>
     <button class="x-btn" id="fix-close" type="button" aria-label="Close Fix spelling">×</button>
   </div>
-  <p class="hint">These words on your cards are still <span class="pill is-fuzzy">ilu ts'im</span>. Correct a spelling, or press <strong>✓</strong> if it’s already right. Changes are saved as you go.</p>
+  <p class="hint">These words on your cards haven’t been checked yet. Correct a spelling, or press <strong>✓</strong> if it’s already right. Changes are saved as you go.</p>
   <div class="words" id="fix-words"></div>
   <div class="actions"><button class="btn btn-primary" id="fix-done" type="button">Done</button></div>
 </dialog>
@@ -488,7 +476,7 @@ label.word-chn { font: 700 1rem/1.3 var(--body); text-transform: none; letter-sp
           <details class="letters">
             <summary>Spelling help</summary>
             <div class="help">
-              <p class="hint"><span class="pill is-fuzzy">ilu ts'im</span> spellings are guesses or haven’t been checked. Type in one, or press <strong>✓</strong>, to mark it <span class="pill is-verified">verified</span>. A word’s spelling is shared by every card that uses it.</p>
+              <p class="hint">Orange spellings are guesses or haven’t been checked yet. Type in one, or press <strong>✓</strong>, to confirm it. A word’s spelling is shared by every card that uses it.</p>
               <p class="hint">A dash breaks the stroke between syllables (<code>ka-na-wi</code>). An apostrophe splits letters that would otherwise join: <code>owa</code> is ow&nbsp;+&nbsp;a, <code>o'wa</code> is o&nbsp;+&nbsp;wa. A number after a letter picks an alternate form: <code>lo2</code> turns the o the other way (<code>lo\2</code> and <code>lo/2</code> work too).</p>
               <p class="hint">Use <code>_</code> for a blank and <code>*stars*</code> for italics, in Chinook and English.</p>
               <dl id="letters"></dl>
@@ -722,13 +710,12 @@ function makeWordRow(w, opts) {
   // The spelling drawn in Duployan, updated as it's typed.
   const dupl = Object.assign(document.createElement('span'), { className: 'word-dupl' });
   dupl.setAttribute('aria-hidden', 'true');
-  const pill = Object.assign(document.createElement('span'), { className: 'pill' });
   const verify = Object.assign(document.createElement('button'), { type: 'button', className: 'verify', textContent: '✓' });
   verify.setAttribute('aria-label', `Mark the spelling of ${w} as verified`);
   const err = Object.assign(document.createElement('p'), { className: 'dup-error' });
   err.setAttribute('aria-live', 'polite');
   input.setAttribute('aria-describedby', err.id = id + '-err');
-  row.append(label, field, dupl, pill, verify, err);
+  row.append(label, field, dupl, verify, err);
 
   const sync = () => { backdrop.scrollLeft = input.scrollLeft; };
   for (const type of ['scroll', 'keyup', 'click', 'select', 'focus']) input.addEventListener(type, sync);
@@ -761,8 +748,6 @@ function makeWordRow(w, opts) {
     field.classList.toggle('has-partial', partial);
     input.setAttribute('aria-invalid', error || empty ? 'true' : 'false');
     row.classList.toggle('is-fuzzy', !sp.verified);
-    pill.className = 'pill ' + (sp.verified ? 'is-verified' : 'is-fuzzy');
-    pill.textContent = sp.verified ? 'verified' : "ilu ts'im";
     verify.disabled = sp.verified;
     sync();
     return !error && !empty;
