@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400;1,700&family=IBM+Plex+Mono:wght@400;500&family=Instrument+Serif&display=swap">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
 @font-face {
   font-family: "Duployan Chinook";
@@ -256,7 +257,7 @@ body {
   flex-direction: column;
   justify-content: space-between;
   overflow: hidden;
-  font-family: "DejaVu Sans", var(--body);
+  font-family: var(--body);
 }
 .card.is-black { background: var(--card-black); color: var(--card-ink-light); }
 .card.is-white { background: var(--card-white); color: var(--card-ink-dark); box-shadow: inset 0 0 0 1px var(--card-edge); }
@@ -274,6 +275,7 @@ body {
     <div class="masthead-side">
       <div class="tally" id="tally" aria-live="polite"></div>
       <div class="toolbar">
+        <button class="btn btn-quiet btn-sm" id="images" type="button">Download images</button>
         <button class="btn btn-quiet btn-sm" id="export" type="button">Export .zip</button>
         <button class="btn btn-quiet btn-sm" id="import" type="button">Import .zip</button>
         <input id="import-file" type="file" accept=".zip,application/zip" hidden>
@@ -467,7 +469,7 @@ const els = {
   dupField: $('dup-field'), backdrop: $('dup-backdrop'), dupError: $('dup-error'),
   save: $('save'), cancel: $('cancel'), del: $('delete'), status: $('status'),
   preview: $('preview'), deck: $('deck'), deckEmpty: $('deck-empty'), tally: $('tally'),
-  exportBtn: $('export'), importBtn: $('import'), importFile: $('import-file'),
+  imagesBtn: $('images'), exportBtn: $('export'), importBtn: $('import'), importFile: $('import-file'),
   banner: $('banner'), bannerText: $('banner-text'), bannerActions: $('banner-actions'),
   bannerOk: $('banner-ok'), bannerCancel: $('banner-cancel'),
 };
@@ -721,6 +723,184 @@ els.importFile.addEventListener('change', async () => {
       say(`Imported ${incoming.length} card${incoming.length === 1 ? '' : 's'}.`);
     } }
   );
+});
+
+
+// ----- Card images (canvas, same layout as the card faces: 750 x 1050) -----
+const IMG = { w: 750, h: 1050, padX: 60, padY: 64, radius: 40 };
+const INK = { black: '#121212', white: '#fdfdfb', edge: '#cfd5d2' };
+const LATIN = '"Atkinson Hyperlegible", "Segoe UI", sans-serif';
+
+async function loadCardFonts() {
+  await Promise.all([
+    document.fonts.load('72px "Duployan Chinook"', '\u{1BC41}'),
+    document.fonts.load(`46px ${LATIN}`), document.fonts.load(`700 46px ${LATIN}`),
+    document.fonts.load(`italic 46px ${LATIN}`), document.fonts.load(`italic 700 46px ${LATIN}`),
+  ]);
+}
+
+// Split text into atoms: words, spaces and blanks, keeping italics from *stars*.
+function atomsOf(s, italics) {
+  const atoms = [];
+  const pushText = (text, italic) => {
+    for (const part of text.split(/(\s+)/)) {
+      if (part) atoms.push({ kind: /^\s+$/.test(part) ? 'space' : 'text', text: part, italic });
+    }
+  };
+  const re = italics ? /(_+)|\*([^*]+)\*/g : /(_+)/g;
+  let last = 0, m;
+  while ((m = re.exec(s))) {
+    if (m.index > last) pushText(s.slice(last, m.index), false);
+    if (m[1]) atoms.push({ kind: 'blank' });
+    else for (const a of atomsOf(m[2], false)) atoms.push(a.kind === 'blank' ? a : { ...a, italic: true });
+    last = re.lastIndex;
+  }
+  if (last < s.length) pushText(s.slice(last), false);
+  return atoms;
+}
+
+// Greedy word wrap. A "word" is a run of atoms with no space between them.
+function wrap(ctx, atoms, style, maxW) {
+  const width = (a) => {
+    if (a.kind === 'blank') return style.blankEm * style.size;
+    ctx.font = style.font(a.italic);
+    return ctx.measureText(a.text).width;
+  };
+  const words = [];
+  let cur = [];
+  for (const a of atoms) {
+    if (a.kind === 'space') { if (cur.length) words.push(cur); cur = []; words.push(null); }
+    else cur.push({ ...a, w: width(a) });
+  }
+  if (cur.length) words.push(cur);
+  ctx.font = style.font(false);
+  const spaceW = ctx.measureText(' ').width;
+  const lines = [[]];
+  let lineW = 0, pendingSpace = false;
+  for (const word of words) {
+    if (word === null) { pendingSpace = lines[lines.length - 1].length > 0; continue; }
+    const ww = word.reduce((n, a) => n + a.w, 0);
+    const line = lines[lines.length - 1];
+    if (line.length && lineW + (pendingSpace ? spaceW : 0) + ww > maxW) {
+      lines.push([...word]);
+      lineW = ww;
+    } else {
+      if (pendingSpace && line.length) { line.push({ kind: 'space', w: spaceW }); lineW += spaceW; }
+      line.push(...word);
+      lineW += ww;
+    }
+    pendingSpace = false;
+  }
+  return lines.filter((l, i) => l.length || i === 0);
+}
+
+function drawLines(ctx, lines, style, x, top) {
+  ctx.font = style.font(false);
+  const mt = ctx.measureText('Hg');
+  const asc = mt.fontBoundingBoxAscent ?? style.size * 0.8;
+  const desc = mt.fontBoundingBoxDescent ?? style.size * 0.2;
+  lines.forEach((line, i) => {
+    const base = top + i * style.lh + (style.lh - (asc + desc)) / 2 + asc;
+    let cx = x;
+    for (const a of line) {
+      if (a.kind === 'blank') {
+        const th = Math.max(2, 0.08 * style.size);
+        ctx.fillRect(cx, base - th, a.w, th);
+      } else if (a.kind === 'text') {
+        ctx.font = style.font(a.italic);
+        ctx.fillText(a.text, cx, base);
+      }
+      cx += a.w;
+    }
+  });
+}
+
+function cardCanvas(card) {
+  const c = document.createElement('canvas');
+  c.width = IMG.w; c.height = IMG.h;
+  const ctx = c.getContext('2d');
+  const dark = card.prompt;
+  ctx.beginPath();
+  ctx.roundRect(0, 0, IMG.w, IMG.h, IMG.radius);
+  ctx.fillStyle = dark ? INK.black : INK.white;
+  ctx.fill();
+  if (!dark) {
+    ctx.beginPath();
+    ctx.roundRect(1, 1, IMG.w - 2, IMG.h - 2, IMG.radius - 1);
+    ctx.strokeStyle = INK.edge; ctx.lineWidth = 2; ctx.stroke();
+  }
+  ctx.fillStyle = dark ? INK.white : INK.black;
+  ctx.textBaseline = 'alphabetic';
+
+  const inner = IMG.w - 2 * IMG.padX;
+  const dupStyle = { size: 72, lh: 72 * 2.2, blankEm: 2, font: () => `72px "Duployan Chinook", ${LATIN}` };
+  const chnStyle = { size: 46, lh: 46 * 1.3, blankEm: 3.5, font: (it) => `${it ? 'italic ' : ''}700 46px ${LATIN}` };
+  const enStyle = { size: 30, lh: 30 * 1.35, blankEm: 3.5, font: (it) => `${it ? 'italic ' : ''}30px ${LATIN}` };
+
+  const dupLines = wrap(ctx, atomsOf(toDuployan(card.dup || '').text, false), dupStyle, inner - 20);
+  const chnLines = wrap(ctx, atomsOf(card.chn || '', true), chnStyle, inner);
+  const enLines = wrap(ctx, atomsOf(card.en || '', true), enStyle, inner);
+  const hd = dupLines.length * dupStyle.lh, hc = chnLines.length * chnStyle.lh, he = enLines.length * enStyle.lh;
+  const gap = Math.max(0, (IMG.h - 2 * IMG.padY - hd - hc - he) / 2);
+
+  drawLines(ctx, dupLines, dupStyle, IMG.padX + 20, IMG.padY);
+  drawLines(ctx, chnLines, chnStyle, IMG.padX, IMG.padY + hd + gap);
+
+  const enTop = IMG.h - IMG.padY - he;
+  ctx.save();
+  ctx.globalAlpha = 0.72;
+  ctx.translate(IMG.w / 2, enTop + he / 2);
+  ctx.rotate(Math.PI);
+  ctx.translate(-IMG.w / 2, -(enTop + he / 2));
+  drawLines(ctx, enLines, enStyle, IMG.padX, enTop);
+  ctx.restore();
+  return c;
+}
+
+const toBlob = (canvas) => new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+
+function saveBlob(blob, name) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+els.imagesBtn.addEventListener('click', async () => {
+  if (!window.JSZip || !window.jspdf) { showBanner('A download library didn’t load. Check your connection and reload the page.', { error: true }); return; }
+  if (!cards.length) { say('There are no cards to download.'); return; }
+  els.imagesBtn.disabled = true;
+  try {
+    await loadCardFonts();
+    const list = [...cards].sort((a, b) => a.created - b.created);
+    const zip = new JSZip();
+    zip.file('cards.json', JSON.stringify(exportList(), null, 2) + '\n');
+
+    // PDF: US Letter, 3 x 3 cards per page at poker size (2.5 x 3.5 in).
+    const pdf = new jspdf.jsPDF({ unit: 'in', format: 'letter' });
+    const cw = 2.5, ch = 3.5, x0 = (8.5 - 3 * cw) / 2, y0 = (11 - 3 * ch) / 2;
+
+    for (const [i, card] of list.entries()) {
+      say(`Drawing card ${i + 1} of ${list.length}…`);
+      const canvas = cardCanvas(card);
+      zip.file(`cards/card-${String(i + 1).padStart(3, '0')}.png`, await toBlob(canvas));
+      const slot = i % 9;
+      if (i && !slot) pdf.addPage();
+      pdf.addImage(canvas, 'PNG', x0 + (slot % 3) * cw, y0 + Math.floor(slot / 3) * ch, cw, ch, undefined, 'FAST');
+    }
+    zip.file('cards.pdf', pdf.output('blob'));
+    say('Building the zip…');
+    const blob = await zip.generateAsync({ type: 'blob' });
+    saveBlob(blob, `chinook-cah-images-${new Date().toISOString().slice(0, 10)}.zip`);
+    say(`Downloaded ${list.length} card image${list.length === 1 ? '' : 's'} and a PDF.`);
+  } catch (e) {
+    showBanner('Couldn’t build the images. Reload the page and try again.', { error: true });
+  } finally {
+    els.imagesBtn.disabled = false;
+  }
 });
 
 // ----- Boot -----
