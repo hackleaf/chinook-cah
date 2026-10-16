@@ -31,8 +31,10 @@ DST = ROOT / 'fonts' / 'NotoSansDuployanChinook-Regular.ttf'
 FAMILY = 'Noto Sans Duployan Chinook'
 
 # (sequence to fix, sequence whose OU glyph to use instead)
+# Not used any more: the cards now use the unpatched Rawnd Musmus Duployan
+# (fonts/RawndMusmusDuployan-Regular.otf). Kept for reference.
 RULES = [
-    ('P OU S', 'P OU T'),  # poos: circle on the left, as in pout/poun
+    # ('P OU S', 'P OU T'),  # poos: circle on the left, as in pout/poun
 ]
 
 # Features the new lookup is added to; it runs after every existing lookup
