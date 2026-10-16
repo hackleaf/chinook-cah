@@ -772,7 +772,18 @@ function refresh() {
   const keys = wordsOf(card.chn);
   const existing = new Map([...els.words.children].map((r) => [r.dataset.word, r]));
   const rows = keys.map((w) => existing.get(w) || makeWordRow(w, editorRowOpts));
-  els.words.replaceChildren(...rows);
+  // Only touch the DOM when the list of words changed: moving a row, even back
+  // to where it was, takes focus from its box (and closes a phone's keyboard).
+  const current = [...els.words.children];
+  if (rows.length !== current.length || rows.some((r, n) => r !== current[n])) {
+    const focused = document.activeElement;
+    const sel = focused && focused.tagName === 'INPUT' ? [focused.selectionStart, focused.selectionEnd] : null;
+    els.words.replaceChildren(...rows);
+    if (focused && focused !== document.activeElement && focused.isConnected) {
+      focused.focus({ preventScroll: true });
+      if (sel) focused.setSelectionRange(...sel);
+    }
+  }
   els.wordsEmpty.hidden = keys.length > 0;
   const allValid = rows.map((r) => r.update()).every(Boolean);
 
