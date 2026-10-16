@@ -113,8 +113,8 @@ async function main() {
   // Patched Noto Sans Duployan (scripts/patch_font.py), no longer used:
   // const font = fs.readFileSync(path.join(__dirname, 'fonts', 'NotoSansDuployanChinook-Regular.ttf'));
   // const fontUrl = 'data:font/ttf;base64,' + font.toString('base64');
-  const font = fs.readFileSync(path.join(__dirname, 'fonts', 'RawndMusmusDuployan-Regular.otf'));
-  const fontUrl = 'data:font/otf;base64,' + font.toString('base64');
+  const font = fs.readFileSync(path.join(__dirname, 'fonts', 'RawndMusmusDuployan-Regular.woff2'));
+  const fontUrl = 'data:font/woff2;base64,' + font.toString('base64');
   const cards = JSON.parse(fs.readFileSync(cardsPath, 'utf8'));
 
   // Validate every card before rendering anything.

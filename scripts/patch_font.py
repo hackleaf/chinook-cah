@@ -32,7 +32,7 @@ FAMILY = 'Noto Sans Duployan Chinook'
 
 # (sequence to fix, sequence whose OU glyph to use instead)
 # Not used any more: the cards now use the unpatched Rawnd Musmus Duployan
-# (fonts/RawndMusmusDuployan-Regular.otf). Kept for reference.
+# (fonts/RawndMusmusDuployan-Regular.woff2). Kept for reference.
 RULES = [
     # ('P OU S', 'P OU T'),  # poos: circle on the left, as in pout/poun
 ]
