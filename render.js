@@ -26,7 +26,6 @@ const LETTERS = {
   wi: 0x1bc5e, // WI
   e: 0x1bc47, // E
   i: 0x1bc46, // I
-  u: 0x1bc51, // U
   h: 0x1bc00, // H
   p: 0x1bc02, // P
   l: 0x1bc06, // L
