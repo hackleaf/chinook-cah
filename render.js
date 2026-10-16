@@ -100,7 +100,7 @@ html, body { margin: 0; background: transparent; }
 .blank { display: inline-block; width: 3.5em; border-bottom: 0.08em solid currentColor; }
 .dup .blank { width: 2em; }
 </style>
-<div class="card${card.klale ? '' : ' white'}">
+<div class="card${card.prompt ? '' : ' white'}">
   <div class="dup">${withBlanks(duployan)}</div>
   <div class="chn">${latin(card.chn)}</div>
   <div class="en">${latin(card.en)}</div>

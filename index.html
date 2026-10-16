@@ -396,7 +396,7 @@ function cardFace(card) {
   const frame = document.createElement('div');
   frame.className = 'card-frame';
   const c = document.createElement('div');
-  c.className = 'card ' + (card.klale ? 'is-black' : 'is-white');
+  c.className = 'card ' + (card.prompt ? 'is-black' : 'is-white');
   const dup = document.createElement('div');
   dup.className = 'c-dup';
   fillText(dup, toDuployan(card.dup || '').text, false);
@@ -426,7 +426,7 @@ function normalize(list) {
       dup: String(c.dup ?? ''),
       chn: String(c.chn ?? ''),
       en: String(c.en ?? ''),
-      klale: !!c.klale,
+      prompt: !!(c.prompt ?? c.klale),   // klale: older saves and exports
       created: Number.isFinite(c.created) ? c.created : base + i,
     }));
 }
@@ -454,7 +454,7 @@ function persist() {
 }
 
 // ----- Editor -----
-const DEFAULTS = { dup: 'klahowia', chn: 'klahowya, kanawi ilihi', en: 'Hello, world', klale: false };
+const DEFAULTS = { dup: 'klahowia', chn: 'klahowya, kanawi ilihi', en: 'Hello, world', prompt: false };
 const $ = (id) => document.getElementById(id);
 const els = {
   editor: $('editor'), form: $('form'), title: $('editor-title'),
@@ -471,14 +471,14 @@ let editingId = null;   // null: new card
 let cards = [];         // newest first
 
 function formCard() {
-  return { dup: els.dup.value, chn: els.chn.value, en: els.en.value, klale: els.klale.checked };
+  return { dup: els.dup.value, chn: els.chn.value, en: els.en.value, prompt: els.klale.checked };
 }
 
 function setForm(card) {
   els.dup.value = card.dup || '';
   els.chn.value = card.chn || '';
   els.en.value = card.en || '';
-  els.klale.checked = !!card.klale;
+  els.klale.checked = !!card.prompt;
   refresh();
 }
 
@@ -626,7 +626,7 @@ function renderDeck() {
     els.deck.append(btn);
   }
   markCurrent();
-  const black = cards.filter((c) => c.klale).length;
+  const black = cards.filter((c) => c.prompt).length;
   els.tally.textContent = `${cards.length} card${cards.length === 1 ? '' : 's'} · ${black} klale · ${cards.length - black} white`;
   els.deckEmpty.hidden = cards.length > 0;
   els.deckEmpty.textContent = 'No cards yet. Add the first one with the form above, or import a .zip.';
@@ -656,7 +656,7 @@ els.bannerCancel.addEventListener('click', hideBanner);
 function exportList() {
   return [...cards]
     .sort((a, b) => a.created - b.created)
-    .map(({ chn, dup, en, klale }) => ({ chn, dup, en, klale }));
+    .map(({ chn, dup, en, prompt }) => ({ chn, dup, en, prompt }));
 }
 
 els.exportBtn.addEventListener('click', async () => {
