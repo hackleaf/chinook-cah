@@ -92,7 +92,7 @@ html, body { margin: 0; background: transparent; }
 }
 .dup { font-family: Dup, "DejaVu Sans", sans-serif; font-size: 72px; line-height: 2.2; }
 .chn { font-size: 46px; font-weight: bold; line-height: 1.3; }
-.en { font-size: 30px; line-height: 1.35; color: #bbb; }
+.en { font-size: 30px; line-height: 1.35; color: #bbb; transform: rotate(180deg); }
 .blank { display: inline-block; width: 3.5em; border-bottom: 0.08em solid currentColor; }
 .dup .blank { width: 2em; }
 </style>
