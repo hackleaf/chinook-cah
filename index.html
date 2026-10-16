@@ -612,6 +612,9 @@ let editingId = null;   // null: new card
 let cards = [];         // newest first
 let words = {};         // Chinook word -> { dup, verified }
 let pending = new Map();   // this edit's spellings, saved with the card
+// A "_" blank makes the card a prompt (klale), until someone sets the checkbox by hand.
+let promptTouched = false;
+const hasBlank = (card) => /_/.test((card.chn || '') + (card.en || ''));
 
 // The spelling the editor shows for a word: this edit's, the saved one, or a guess.
 function draftSpelling(w) {
@@ -627,6 +630,8 @@ function setForm(card) {
   els.chn.value = card.chn || '';
   els.en.value = card.en || '';
   els.klale.checked = !!card.prompt;
+  // A saved card that doesn't follow the blank rule had its checkbox set by hand.
+  promptTouched = !!card.prompt !== hasBlank(card);
   els.words.replaceChildren();
   refresh();
 }
@@ -830,9 +835,14 @@ els.del.addEventListener('click', () => {
   say('Card deleted.');
 });
 
-for (const el of [els.chn, els.en, els.klale]) {
-  el.addEventListener('input', () => { disarmDelete(); refresh(); });
+for (const el of [els.chn, els.en]) {
+  el.addEventListener('input', () => {
+    if (!promptTouched) els.klale.checked = hasBlank(formCard());
+    disarmDelete();
+    refresh();
+  });
 }
+els.klale.addEventListener('input', () => { promptTouched = true; disarmDelete(); refresh(); });
 
 // Letters legend: every letter, then its numbered forms beside it
 (function buildLegend() {
