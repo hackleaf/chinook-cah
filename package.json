@@ -2,7 +2,8 @@
   "name": "chinook-cah",
   "private": true,
   "scripts": {
-    "render": "node render.js"
+    "render": "node render.js",
+    "patch-font": "python3 scripts/patch_font.py"
   },
   "devDependencies": {
     "playwright": "^1.56.1"

@@ -93,7 +93,7 @@ html, body { margin: 0; background: transparent; }
   font-family: "DejaVu Sans", sans-serif;
   display: flex; flex-direction: column; justify-content: space-between;
 }
-.dup { font-family: Dup, "DejaVu Sans", sans-serif; font-size: 72px; line-height: 2.2; }
+.dup { font-family: Dup, "DejaVu Sans", sans-serif; font-size: 72px; line-height: 2.2; padding-left: 20px; }
 .chn { font-size: 46px; font-weight: bold; line-height: 1.3; }
 .en { font-size: 30px; line-height: 1.35; color: #bbb; transform: rotate(180deg); }
 .blank { display: inline-block; width: 3.5em; border-bottom: 0.08em solid currentColor; }
@@ -109,7 +109,7 @@ html, body { margin: 0; background: transparent; }
 async function main() {
   const cardsPath = path.resolve(process.argv[2] || path.join(__dirname, 'cards.json'));
   const outDir = path.resolve(process.argv[3] || path.join(__dirname, 'out'));
-  const font = fs.readFileSync(path.join(__dirname, 'fonts', 'NotoSansDuployan-Regular.ttf'));
+  const font = fs.readFileSync(path.join(__dirname, 'fonts', 'NotoSansDuployanChinook-Regular.ttf'));
   const fontUrl = 'data:font/ttf;base64,' + font.toString('base64');
   const cards = JSON.parse(fs.readFileSync(cardsPath, 'utf8'));
 
